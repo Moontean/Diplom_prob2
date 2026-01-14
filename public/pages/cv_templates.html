@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Шаблоны резюме — CV Builder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body id="root">
+
+  <!-- НАВИГАЦИЯ -->
+  <nav id="nav" class="navbar">
+    <div class="nav-container">
+      <a class="nav-brand" href="/">
+        <div class="brand-logo">
+          <span class="brand-text">CV Builder</span>
+        </div>
+      </a>
+      
+      <div class="nav-menu">
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            <span>Инструменты</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="nav-dropdown-menu">
+            <div class="dropdown-item">
+              <a href="/pages/cv-templates">Шаблоны</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/cv-examples">Примеры</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/articles">Статьи</a>
+            </div>
+          </div>
+        </div>
+        <a class="nav-link" href="/pages/pricing">Цены</a>
+        <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
+      </div>
+      
+      <div class="nav-actions">
+        <a class="btn btn-outline" href="/pages/login">Авторизоваться</a>
+        <a class="btn btn-primary cta" href="/pages/make_CV">Создать резюме</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ -->
+  <main class="main-content">
+    <div class="container" style="padding: 100px 20px; min-height: 80vh;">
+      
+      <div class="hero-section" style="padding: 4rem 0; text-align: center;">
+        <h1 class="hero-title">Шаблоны резюме</h1>
+        <p class="hero-description">
+          Выберите профессиональный шаблон резюме из нашей коллекции. 
+          Все шаблоны созданы экспертами по HR и адаптированы под современные требования работодателей.
+        </p>
+      </div>
+      
+      <!-- Сетка шаблонов -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin: 3rem 0;">
+        
+        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+            Классический шаблон
+          </div>
+          <h3 style="margin-bottom: 0.5rem; color: #111827;">Классический</h3>
+          <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
+            Традиционный формат резюме, подходящий для большинства профессий
+          </p>
+          <a href="/pages/make_CV" class="btn btn-primary">Использовать шаблон</a>
+        </div>
+        
+        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div style="height: 200px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+            Современный шаблон
+          </div>
+          <h3 style="margin-bottom: 0.5rem; color: #111827;">Современный</h3>
+          <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
+            Стильный дизайн для творческих профессий и стартапов
+          </p>
+          <a href="/pages/make_CV" class="btn btn-primary">Использовать шаблон</a>
+        </div>
+        
+        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div style="height: 200px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+            Минималистичный
+          </div>
+          <h3 style="margin-bottom: 0.5rem; color: #111827;">Минималистичный</h3>
+          <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
+            Чистый дизайн с фокусом на контент
+          </p>
+          <a href="/pages/make_CV" class="btn btn-primary">Использовать шаблон</a>
+        </div>
+        
+        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div style="height: 200px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+            Europass формат
+          </div>
+          <h3 style="margin-bottom: 0.5rem; color: #111827;">Europass</h3>
+          <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
+            Европейский стандарт резюме для работы в ЕС
+          </p>
+          <a href="/pages/make_CV" class="btn btn-primary">Использовать шаблон</a>
+        </div>
+        
+      </div>
+      
+      <div style="text-align: center; margin-top: 3rem;">
+        <p style="color: #6b7280; margin-bottom: 1rem;">
+          Не нашли подходящий шаблон?
+        </p>
+        <a href="/pages/make_CV" class="btn btn-outline">Создать резюме с нуля</a>
+        <span style="margin: 0 1rem; color: #d1d5db;">или</span>
+        <a href="/" style="color: #3b82f6; text-decoration: underline;">← Вернуться на главную</a>
+      </div>
+      
+    </div>
+  </main>
+
+  <!-- ПОДВАЛ -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-bottom">
+        <div class="social-links">
+          <a href="#" class="social-link">Facebook</a>
+          <a href="#" class="social-link">Twitter</a>
+          <a href="#" class="social-link">LinkedIn</a>
+        </div>
+        <div class="copyright">
+          © 2025 <a href="/">CV Builder</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

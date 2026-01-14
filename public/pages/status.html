@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CV Builder - База данных готова!</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      max-width: 800px; 
+      margin: 50px auto; 
+      padding: 20px; 
+      background: #f5f5f5; 
+    }
+    .container { 
+      background: white; 
+      padding: 30px; 
+      border-radius: 10px; 
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1); 
+    }
+    .success { 
+      color: #22c55e; 
+      background: #dcfce7; 
+      padding: 15px; 
+      border-radius: 8px; 
+      margin: 20px 0; 
+    }
+    .warning { 
+      color: #f59e0b; 
+      background: #fef3c7; 
+      padding: 15px; 
+      border-radius: 8px; 
+      margin: 20px 0; 
+    }
+    a { 
+      display: inline-block; 
+      background: #3b82f6; 
+      color: white; 
+      padding: 12px 24px; 
+      text-decoration: none; 
+      border-radius: 6px; 
+      margin: 10px 10px 10px 0; 
+    }
+    a:hover { background: #2563eb; }
+    h1 { color: #111827; }
+    h2 { color: #374151; margin-top: 30px; }
+    ul { line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 CV Builder - MongoDB Интеграция</h1>
+    
+    <div class="success">
+      ✅ <strong>Успешно!</strong> MongoDB интеграция добавлена в проект
+    </div>
+    
+    <div id="dbStatus" class="warning">
+      ⏳ Проверяется подключение к базе данных...
+    </div>
+
+    <h2>🔧 Что было добавлено:</h2>
+    <ul>
+      <li><strong>Mongoose</strong> - ODM для работы с MongoDB</li>
+      <li><strong>Модель User</strong> - схема пользователей с валидацией</li>
+      <li><strong>Подключение к БД</strong> - автоматический fallback на in-memory</li>
+      <li><strong>Переменные окружения</strong> - безопасное хранение настроек</li>
+      <li><strong>Хеширование паролей</strong> - улучшенная безопасность</li>
+      <li><strong>Индексы базы данных</strong> - оптимизация производительности</li>
+    </ul>
+
+    <h2>📄 Тестирование:</h2>
+    <a href="/pages/register">Регистрация пользователя</a>
+    <a href="/pages/login">Авторизация</a>
+    <a href="/pages/dashboard">Личный кабинет</a>
+
+    <h2>🔌 Статус базы данных:</h2>
+    <p>Приложение поддерживает работу как с MongoDB, так и без неё:</p>
+    <ul>
+      <li><strong>С MongoDB:</strong> Полноценное хранение в базе данных</li>
+      <li><strong>Без MongoDB:</strong> Временное хранение в памяти (для разработки)</li>
+    </ul>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280;">
+      <p>Для установки MongoDB локально см. файл <code>MONGODB_SETUP.md</code></p>
+    </div>
+  </div>
+
+  <script>
+    // Проверяем статус базы данных
+    fetch('/api/db-status')
+      .then(res => res.json())
+      .then(data => {
+        const statusDiv = document.getElementById('dbStatus');
+        if (data.connected) {
+          statusDiv.className = 'success';
+          statusDiv.innerHTML = '✅ <strong>MongoDB подключена!</strong> Полная функциональность доступна';
+        } else {
+          statusDiv.className = 'warning';
+          statusDiv.innerHTML = '⚠️ <strong>Работа без MongoDB</strong> (in-memory режим)';
+        }
+      })
+      .catch(() => {
+        const statusDiv = document.getElementById('dbStatus');
+        statusDiv.className = 'warning';
+        statusDiv.innerHTML = '⚠️ <strong>Работа без MongoDB</strong> (in-memory режим)';
+      });
+  </script>
+</body>
+</html>

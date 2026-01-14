@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Часто задаваемые вопросы — CV Builder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body id="root">
+
+  <!-- НАВИГАЦИЯ -->
+  <nav id="nav" class="navbar">
+    <div class="nav-container">
+      <a class="nav-brand" href="/">
+        <div class="brand-logo">
+          <span class="brand-text">CV Builder</span>
+        </div>
+      </a>
+      
+      <div class="nav-menu">
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            <span>Инструменты</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="nav-dropdown-menu">
+            <div class="dropdown-item">
+              <a href="/pages/cv-templates">Шаблоны</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/cv-examples">Примеры</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/articles">Статьи</a>
+            </div>
+          </div>
+        </div>
+        <a class="nav-link" href="/pages/pricing">Цены</a>
+        <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
+      </div>
+      
+      <div class="nav-actions">
+        <a class="btn btn-outline" href="/pages/login">Авторизоваться</a>
+        <a class="btn btn-primary cta" href="/pages/make_CV">Создать резюме</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ -->
+  <main class="main-content">
+    <div class="container" style="padding: 100px 20px; min-height: 80vh; max-width: 800px; margin: 0 auto;">
+      
+      <div class="hero-section" style="padding: 4rem 0; text-align: center;">
+        <h1 class="hero-title">Часто задаваемые вопросы</h1>
+        <p class="hero-description">
+          Ответы на самые популярные вопросы о создании резюме, использовании сервиса 
+          и тарифных планах.
+        </p>
+      </div>
+      
+      <!-- FAQ Categories -->
+      <div style="margin: 3rem 0;">
+        <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
+          <button class="btn btn-outline" style="font-size: 0.875rem;" onclick="showCategory('general')">Общие вопросы</button>
+          <button class="btn btn-outline" style="font-size: 0.875rem;" onclick="showCategory('resume')">О резюме</button>
+          <button class="btn btn-outline" style="font-size: 0.875rem;" onclick="showCategory('pricing')">Тарифы</button>
+          <button class="btn btn-outline" style="font-size: 0.875rem;" onclick="showCategory('technical')">Технические</button>
+        </div>
+      </div>
+      
+      <!-- General Questions -->
+      <div id="general-faq" class="faq-category">
+        <h2 style="color: #111827; margin-bottom: 2rem; font-size: 1.5rem;">🔧 Общие вопросы</h2>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q1')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Что такое CV Builder и как он работает?
+            <span id="q1-icon">+</span>
+          </button>
+          <div id="q1-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            CV Builder — это онлайн-сервис для создания профессиональных резюме. Вы выбираете шаблон, 
+            заполняете информацию о себе, и система автоматически создает красиво оформленное резюме, 
+            которое можно скачать в PDF или Word формате.
+          </div>
+        </div>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q2')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Можно ли использовать сервис бесплатно?
+            <span id="q2-icon">+</span>
+          </button>
+          <div id="q2-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            Да! У нас есть бесплатный тариф, который позволяет создать одно резюме с базовыми шаблонами 
+            и экспортировать его в PDF. Для расширенных возможностей доступны платные тарифы.
+          </div>
+        </div>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q3')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Нужно ли регистрироваться для использования?
+            <span id="q3-icon">+</span>
+          </button>
+          <div id="q3-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            Для создания и сохранения резюме необходима регистрация. Это позволяет сохранять ваши резюме 
+            в личном кабинете и редактировать их в любое время. Регистрация быстрая и бесплатная.
+          </div>
+        </div>
+      </div>
+      
+      <!-- Resume Questions -->
+      <div id="resume-faq" class="faq-category" style="margin-top: 3rem;">
+        <h2 style="color: #111827; margin-bottom: 2rem; font-size: 1.5rem;">📝 Вопросы о резюме</h2>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q4')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Какой должна быть оптимальная длина резюме?
+            <span id="q4-icon">+</span>
+          </button>
+          <div id="q4-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            Для большинства специальностей оптимальная длина резюме — 1-2 страницы. Для начинающих 
+            специалистов достаточно одной страницы, для опытных профессионалов — до двух страниц. 
+            Главное — включать только релевантную информацию.
+          </div>
+        </div>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q5')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Что такое ATS и как оптимизировать резюме под него?
+            <span id="q5-icon">+</span>
+          </button>
+          <div id="q5-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            ATS (Applicant Tracking System) — система автоматического отбора резюме. Для оптимизации 
+            используйте: ключевые слова из вакансии, стандартные названия разделов, избегайте сложного 
+            форматирования и графических элементов. Наши шаблоны уже оптимизированы под ATS.
+          </div>
+        </div>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q6')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Что такое Europass CV и когда его использовать?
+            <span id="q6-icon">+</span>
+          </button>
+          <div id="q6-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            Europass CV — стандартизированный европейский формат резюме. Используйте его при поиске 
+            работы в странах ЕС, особенно в государственных организациях и образовательных учреждениях. 
+            У нас есть специальный шаблон Europass.
+          </div>
+        </div>
+      </div>
+      
+      <!-- Pricing Questions -->
+      <div id="pricing-faq" class="faq-category" style="margin-top: 3rem;">
+        <h2 style="color: #111827; margin-bottom: 2rem; font-size: 1.5rem;">💰 Вопросы о тарифах</h2>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q7')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Чем отличаются тарифные планы?
+            <span id="q7-icon">+</span>
+          </button>
+          <div id="q7-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            <strong>Бесплатно:</strong> 1 резюме, базовые шаблоны, PDF экспорт<br>\n            <strong>Базовый:</strong> 5 резюме, все шаблоны, PDF/Word экспорт, сопроводительные письма<br>\n            <strong>Премиум:</strong> неограниченно резюме, эксклюзивные шаблоны, приоритетная поддержка
+          </div>
+        </div>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q8')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Можно ли отменить подписку?
+            <span id="q8-icon">+</span>
+          </button>
+          <div id="q8-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            Да, вы можете отменить подписку в любое время в личном кабинете. При отмене доступ к 
+            премиум-функциям сохраняется до конца оплаченного периода, после чего аккаунт переходит 
+            на бесплатный тариф.
+          </div>
+        </div>
+      </div>
+      
+      <!-- Technical Questions -->
+      <div id="technical-faq" class="faq-category" style="margin-top: 3rem;">
+        <h2 style="color: #111827; margin-bottom: 2rem; font-size: 1.5rem;">⚙️ Технические вопросы</h2>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q9')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            В каких форматах можно скачать резюме?
+            <span id="q9-icon">+</span>
+          </button>
+          <div id="q9-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            Резюме доступно для скачивания в форматах PDF и Word (DOCX). PDF рекомендуется для отправки 
+            работодателям, так как сохраняет форматирование. Word удобен для редактирования и адаптации 
+            под конкретные вакансии.
+          </div>
+        </div>
+        
+        <div class="faq-item" style="background: white; border-radius: 0.75rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+          <button class="faq-question" onclick="toggleAnswer('q10')" style="width: 100%; text-align: left; padding: 1.5rem; background: none; border: none; font-size: 1.125rem; font-weight: 600; color: #111827; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            Можно ли импортировать существующее резюме?
+            <span id="q10-icon">+</span>
+          </button>
+          <div id="q10-answer" class="faq-answer" style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; color: #374151; line-height: 1.6;">
+            В настоящее время функция импорта находится в разработке. Пока рекомендуем вручную перенести 
+            информацию из существующего резюме в наш конструктор — это поможет структурировать данные 
+            и улучшить форматирование.
+          </div>
+        </div>
+      </div>
+      
+      <!-- Contact Support -->
+      <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 3rem 2rem; border-radius: 0.75rem; text-align: center; margin-top: 4rem;">
+        <h3 style="color: #111827; margin-bottom: 1rem; font-size: 1.5rem;">
+          Не нашли ответ на свой вопрос?
+        </h3>
+        <p style="color: #6b7280; margin-bottom: 2rem;">
+          Наша служба поддержки готова помочь вам в любое время
+        </p>
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+          <a href="mailto:support@cvbuilder.com" class="btn btn-primary">Написать в поддержку</a>
+          <a href="/pages/articles" class="btn btn-outline">Читать статьи</a>
+        </div>
+        <div style="margin-top: 2rem;">
+          <a href="/" style="color: #3b82f6; text-decoration: underline;">← Вернуться на главную</a>
+        </div>
+      </div>
+      
+    </div>
+  </main>
+
+  <!-- ПОДВАЛ -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-bottom">
+        <div class="social-links">
+          <a href="#" class="social-link">Facebook</a>
+          <a href="#" class="social-link">Twitter</a>
+          <a href="#" class="social-link">LinkedIn</a>
+        </div>
+        <div class="copyright">
+          © 2025 <a href="/">CV Builder</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>
+    function toggleAnswer(questionId) {
+      const answer = document.getElementById(questionId + '-answer');
+      const icon = document.getElementById(questionId + '-icon');
+      
+      if (answer.style.display === 'none' || answer.style.display === '') {
+        answer.style.display = 'block';
+        icon.textContent = '−';
+      } else {
+        answer.style.display = 'none';
+        icon.textContent = '+';
+      }
+    }
+    
+    function showCategory(category) {
+      // This function could be expanded to filter FAQ categories
+      console.log('Showing category:', category);
+    }
+  </script>
+</body>
+</html>

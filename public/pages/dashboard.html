@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Личный кабинет — CV Builder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body id="root">
+
+  <!-- НАВИГАЦИЯ -->
+  <nav id="nav" class="navbar">
+    <div class="nav-container">
+      <a class="nav-brand" href="/">
+        <div class="brand-logo">
+          <span class="brand-text">CV Builder</span>
+        </div>
+      </a>
+      
+      <div class="nav-menu">
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            <span>Инструменты</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="nav-dropdown-menu">
+            <div class="dropdown-item">
+              <a href="/pages/cv-templates">Шаблоны</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/cv-examples">Примеры</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/articles">Статьи</a>
+            </div>
+          </div>
+        </div>
+        <a class="nav-link" href="/pages/pricing">Цены</a>
+        <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
+      </div>
+      
+      <div class="nav-actions" id="navActions">
+        <!-- Будет заполнено JavaScript -->
+      </div>
+    </div>
+  </nav>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ -->
+  <main class="main-content">
+    <div class="container" style="padding: 100px 20px; min-height: 80vh; max-width: 1200px; margin: 0 auto;">
+      
+      <!-- Загрузка -->
+      <div id="loading" style="text-align: center; padding: 4rem;">
+        <h2 style="color: #6b7280;">Загрузка...</h2>
+      </div>
+
+      <!-- Основной контент дашборда -->
+      <div id="dashboard" style="display: none;">
+        
+        <!-- Приветствие -->
+        <div class="hero-section" style="padding: 2rem 0; margin-bottom: 3rem;">
+          <h1 id="welcomeMessage" class="hero-title">Добро пожаловать в ваш личный кабинет!</h1>
+          <p class="hero-description">Управляйте своими резюме и настройками аккаунта</p>
+        </div>
+
+        <!-- Статистика -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
+          
+          <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <h3 style="font-size: 2.25rem; font-weight: 700; margin-bottom: 0.5rem;" id="resumeCount">0</h3>
+                <p style="opacity: 0.9;">Резюме создано</p>
+              </div>
+              <div style="font-size: 2rem;">📄</div>
+            </div>
+          </div>
+
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <h3 style="font-size: 2.25rem; font-weight: 700; margin-bottom: 0.5rem;">PRO</h3>
+                <p style="opacity: 0.9;">Ваш тарифный план</p>
+              </div>
+              <div style="font-size: 2rem;">⭐</div>
+            </div>
+          </div>
+
+          <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <h3 style="font-size: 2.25rem; font-weight: 700; margin-bottom: 0.5rem;" id="memberSince">2025</h3>
+                <p style="opacity: 0.9;">Год регистрации</p>
+              </div>
+              <div style="font-size: 2rem;">🗓️</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Быстрые действия -->
+        <div style="background: white; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 2rem; margin-bottom: 3rem;">
+          <h2 style="color: #111827; margin-bottom: 1.5rem; font-size: 1.5rem;">Быстрые действия</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            
+            <a href="/pages/cv-builder" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; padding: 1.5rem; text-decoration: none;">
+              <span style="margin-right: 0.5rem;">➕</span>
+              Создать новое резюме
+            </a>
+
+            <a href="/pages/cv-templates" class="btn btn-outline" style="display: flex; align-items: center; justify-content: center; padding: 1.5rem; text-decoration: none;">
+              <span style="margin-right: 0.5rem;">🎨</span>
+              Просмотреть шаблоны
+            </a>
+
+            <button onclick="showSettings()" class="btn btn-outline" style="display: flex; align-items: center; justify-content: center; padding: 1.5rem;">
+              <span style="margin-right: 0.5rem;">⚙️</span>
+              Настройки аккаунта
+            </button>
+
+          </div>
+        </div>
+
+        <!-- Мои резюме -->
+        <div style="background: white; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 2rem;">
+          <h2 style="color: #111827; margin-bottom: 1.5rem; font-size: 1.5rem;">Мои резюме</h2>
+          
+          <div id="resumesList">
+            <div style="text-align: center; padding: 3rem; color: #6b7280;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">📄</div>
+              <h3 style="margin-bottom: 1rem;">У вас пока нет резюме</h3>
+              <p style="margin-bottom: 2rem;">Создайте ваше первое профессиональное резюме прямо сейчас</p>
+              <a href="/pages/cv-builder" class="btn btn-primary">Создать резюме</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Сообщение об ошибке -->
+      <div id="error" style="display: none; text-align: center; padding: 4rem;">
+        <h2 style="color: #dc2626;">Доступ запрещен</h2>
+        <p style="color: #6b7280; margin-bottom: 2rem;">Пожалуйста, войдите в систему для доступа к личному кабинету</p>
+        <a href="/pages/login" class="btn btn-primary">Войти</a>
+      </div>
+      
+    </div>
+  </main>
+
+  <script>
+    let currentUser = null;
+
+    // Проверка авторизации и загрузка данных
+    async function loadDashboard() {
+      try {
+        const response = await fetch('/api/user');
+        const result = await response.json();
+        
+        if (result.authenticated) {
+          currentUser = result.user;
+          showDashboard();
+        } else {
+          showError();
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки:', error);
+        showError();
+      }
+    }
+
+    function showDashboard() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      
+      // Обновляем приветствие
+      document.getElementById('welcomeMessage').textContent = 
+        `Добро пожаловать, ${currentUser.firstName}!`;
+      
+      // Обновляем навигацию
+      const navActions = document.getElementById('navActions');
+      navActions.innerHTML = `
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            <span>${currentUser.firstName}</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="nav-dropdown-menu">
+            <div class="dropdown-item">
+              <a href="/pages/dashboard">Личный кабинет</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="#" onclick="logout()">Выйти</a>
+            </div>
+          </div>
+        </div>
+        <a class="btn btn-primary cta" href="/pages/cv-builder">Создать резюме</a>
+      `;
+    }
+
+    function showError() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+    }
+
+    async function logout() {
+      try {
+        const response = await fetch('/api/logout', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.success) {
+          window.location.href = '/';
+        }
+      } catch (error) {
+        console.error('Ошибка выхода:', error);
+        window.location.href = '/';
+      }
+    }
+
+    function showSettings() {
+      alert('Раздел настроек находится в разработке');
+    }
+
+    // Загружаем дашборд при загрузке страницы
+    loadDashboard();
+  </script>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

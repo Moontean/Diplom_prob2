@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Регистрация — CV Builder</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body id="root">
+
+  <!-- НАВИГАЦИЯ -->
+  <nav id="nav" class="navbar">
+    <div class="nav-container">
+      <a class="nav-brand" href="/">
+        <div class="brand-logo">
+          <span class="brand-text">CV Builder</span>
+        </div>
+      </a>
+      
+      <div class="nav-menu">
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn" type="button">
+            <span>Инструменты</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+          <div class="nav-dropdown-menu">
+            <div class="dropdown-item">
+              <a href="/pages/cv-templates">Шаблоны</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/cv-examples">Примеры</a>
+            </div>
+            <div class="dropdown-item">
+              <a href="/pages/articles">Статьи</a>
+            </div>
+          </div>
+        </div>
+        <a class="nav-link" href="/pages/pricing">Цены</a>
+        <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
+      </div>
+      
+      <div class="nav-actions">
+        <a class="btn btn-outline" href="/pages/login">Войти</a>
+        <a class="btn btn-primary cta" href="/pages/make_CV">Создать резюме</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ОСНОВНОЙ КОНТЕНТ -->
+  <main class="main-content">
+    <div class="container" style="padding: 100px 20px; min-height: 80vh; max-width: 500px; margin: 0 auto;">
+      
+      <div class="auth-container" style="background: white; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); padding: 3rem;">
+        <div style="text-align: center; margin-bottom: 2rem;">
+          <h1 style="color: #111827; font-size: 2rem; margin-bottom: 0.5rem;">Создать аккаунт</h1>
+          <p style="color: #6b7280; font-size: 1rem;">Присоединяйтесь к тысячам пользователей CV Builder</p>
+        </div>
+
+        <!-- Уведомления -->
+        <div id="notification" style="display: none; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; font-weight: 500;"></div>
+
+        <!-- Форма регистрации -->
+        <form id="registerForm">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+            <div>
+              <label for="firstName" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                Имя *
+              </label>
+              <input 
+                type="text" 
+                id="firstName" 
+                name="firstName" 
+                required
+                style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#3b82f6'"
+                onblur="this.style.borderColor='#d1d5db'"
+              >
+            </div>
+            <div>
+              <label for="lastName" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+                Фамилия *
+              </label>
+              <input 
+                type="text" 
+                id="lastName" 
+                name="lastName" 
+                required
+                style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#3b82f6'"
+                onblur="this.style.borderColor='#d1d5db'"
+              >
+            </div>
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label for="email" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+              Email адрес *
+            </label>
+            <input 
+              type="email" 
+              id="email" 
+              name="email" 
+              required
+              style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#3b82f6'"
+              onblur="this.style.borderColor='#d1d5db'"
+            >
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label for="password" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+              Пароль *
+            </label>
+            <input 
+              type="password" 
+              id="password" 
+              name="password" 
+              required
+              minlength="6"
+              style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#3b82f6'"
+              onblur="this.style.borderColor='#d1d5db'"
+            >
+            <p style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">Минимум 6 символов</p>
+          </div>
+
+          <div style="margin-bottom: 2rem;">
+            <label for="confirmPassword" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
+              Подтверждение пароля *
+            </label>
+            <input 
+              type="password" 
+              id="confirmPassword" 
+              name="confirmPassword" 
+              required
+              style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
+              onfocus="this.style.borderColor='#3b82f6'"
+              onblur="this.style.borderColor='#d1d5db'"
+            >
+          </div>
+
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input type="checkbox" required style="margin-right: 0.5rem;">
+              <span style="color: #374151; font-size: 0.875rem;">
+                Я согласен с <a href="#" style="color: #3b82f6; text-decoration: underline;">условиями использования</a> 
+                и <a href="#" style="color: #3b82f6; text-decoration: underline;">политикой конфиденциальности</a>
+              </span>
+            </label>
+          </div>
+
+          <button 
+            type="submit" 
+            class="btn btn-primary" 
+            style="width: 100%; padding: 1rem; font-size: 1rem; margin-bottom: 1.5rem;"
+            id="submitBtn"
+          >
+            Создать аккаунт
+          </button>
+
+          <div style="text-align: center;">
+            <p style="color: #6b7280; margin-bottom: 1rem;">
+              Уже есть аккаунт? 
+              <a href="/pages/login" style="color: #3b82f6; font-weight: 600; text-decoration: underline;">
+                Войти
+              </a>
+            </p>
+            
+            <div style="border-top: 1px solid #e5e7eb; padding-top: 1rem;">
+              <a href="/" style="color: #6b7280; text-decoration: underline; font-size: 0.875rem;">
+                ← Вернуться на главную
+              </a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submitBtn');
+      const notification = document.getElementById('notification');
+      
+      // Получаем данные формы
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData);
+      
+      // Проверяем совпадение паролей
+      if (data.password !== data.confirmPassword) {
+        showNotification('Пароли не совпадают', 'error');
+        return;
+      }
+      
+      // Блокируем кнопку
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Создание аккаунта...';
+      
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showNotification(result.message, 'success');
+          setTimeout(() => {
+            window.location.href = '/pages/login';
+          }, 2000);
+        } else {
+          showNotification(result.message, 'error');
+        }
+      } catch (error) {
+        showNotification('Ошибка сети. Попробуйте еще раз.', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Создать аккаунт';
+      }
+    });
+    
+    function showNotification(message, type) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.style.display = 'block';
+      
+      if (type === 'success') {
+        notification.style.backgroundColor = '#dcfce7';
+        notification.style.color = '#166534';
+        notification.style.border = '1px solid #bbf7d0';
+      } else {
+        notification.style.backgroundColor = '#fef2f2';
+        notification.style.color = '#dc2626';
+        notification.style.border = '1px solid #fecaca';
+      }
+      
+      setTimeout(() => {
+        notification.style.display = 'none';
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
