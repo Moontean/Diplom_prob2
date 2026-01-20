@@ -8,7 +8,13 @@ class CVBuilder {
             education: [],
             skills: [],
             languages: [],
-            additionalSections: {}
+            additionalSections: {},
+            template: 'modern',
+            settings: {
+                fontSize: 'medium',
+                colorScheme: 'blue',
+                includePhoto: true
+            }
         };
         
         this.init();
@@ -16,6 +22,7 @@ class CVBuilder {
 
     init() { // посмотреть гайды
         this.attachEventListeners();
+        this.applyTemplateFromQuery();
         this.loadSavedData();
         this.setupAutoSave();
     }
@@ -24,19 +31,19 @@ class CVBuilder {
         // Кнопки добавления дополнительных полей в персональной информации
         const addFieldButtons = document.querySelectorAll('.add-field-btn');
         addFieldButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => this.addPersonalField(e.target.dataset.field));
+            btn.addEventListener('click', (e) => this.addPersonalField(e.currentTarget.dataset.field));
         });
 
         // Кнопки добавления элементов в разделы
         const addSectionButtons = document.querySelectorAll('.add-section-item');
         addSectionButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => this.addSectionItem(e.target.dataset.section));
+            btn.addEventListener('click', (e) => this.addSectionItem(e.currentTarget.dataset.section));
         });
 
         // Кнопки добавления новых разделов
         const addSectionBtns = document.querySelectorAll('.add-section-btn');
         addSectionBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => this.addNewSection(e.target.dataset.section));
+            btn.addEventListener('click', (e) => this.addNewSection(e.currentTarget.dataset.section));
         });
 
         // Загрузка фото
@@ -51,9 +58,22 @@ class CVBuilder {
         // Кнопки в панели инструментов
         const downloadBtn = document.getElementById('download-btn');
         const previewBtn = document.getElementById('preview-btn');
+        const saveBtn = document.getElementById('save-btn');
         
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (previewBtn) previewBtn.addEventListener('click', () => this.showPreview());
+        if (saveBtn) saveBtn.addEventListener('click', () => {
+            this.saveData();
+            // небольшая визуальная обратная связь
+            saveBtn.classList.add('can-hover:active:bg-brand-100');
+            setTimeout(() => saveBtn.classList.remove('can-hover:active:bg-brand-100'), 200);
+        });
+
+        // Выбор шаблона
+        const templateButtons = document.querySelectorAll('.template-option');
+        templateButtons.forEach(btn => {
+            btn.addEventListener('click', () => this.selectTemplate(btn.dataset.template));
+        });
 
         // Загрузка файлов
         const fileUpload = document.getElementById('file-upload');
@@ -82,6 +102,18 @@ class CVBuilder {
         document.addEventListener('input', (e) => {
             if (e.target.matches('input, textarea, select')) {
                 this.saveData();
+            }
+        });
+
+        // Делегирование для динамических кнопок (+ и добавление полей)
+        document.addEventListener('click', (e) => {
+            const addItemBtn = e.target.closest('.add-section-item');
+            if (addItemBtn) {
+                this.addSectionItem(addItemBtn.dataset.section);
+            }
+            const addFieldBtn = e.target.closest('.add-field-btn');
+            if (addFieldBtn) {
+                this.addPersonalField(addFieldBtn.dataset.field);
             }
         });
 
@@ -396,12 +428,21 @@ class CVBuilder {
             },
             projects: {
                 title: 'Проекты',
-                template: 'projects'
+                template: 'textarea'
             },
             certificates: {
                 title: 'Сертификаты',
-                template: 'certificates'
-            }
+                template: 'textarea'
+            },
+            courses: { title: 'Курсы', template: 'textarea' },
+            internships: { title: 'Стажировки', template: 'textarea' },
+            activities: { title: 'Дополнительные виды деятельности', template: 'textarea' },
+            references: { title: 'Рекомендации', template: 'textarea' },
+            qualities: { title: 'Качества', template: 'textarea' },
+            achievements: { title: 'Достижения', template: 'textarea' },
+            signature: { title: 'Подпись', template: 'textarea' },
+            footer: { title: 'Нижний колонтитул', template: 'textarea' },
+            custom: { title: 'Собственный раздел', template: 'textarea' }
         };
 
         const config = sectionConfigs[sectionType];
@@ -515,25 +556,33 @@ class CVBuilder {
             },
             body: JSON.stringify(this.userData)
         })
-        .then(response => {
-            if (response.ok) {
-                return response.blob();
+        .then(async (response) => {
+            const ct = response.headers.get('content-type') || '';
+            if (response.ok && ct.includes('application/pdf')) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${this.getDocumentTitle() || 'resume'}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                return;
             }
-            throw new Error('Ошибка при генерации PDF');
-        })
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${this.getDocumentTitle() || 'resume'}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            // сервер пока возвращает JSON-заглушку
+            const data = await response.json().catch(() => ({ success:false }));
+            const msg = data?.message || (response.status === 401 ? 'Требуется авторизация' : 'Ошибка при генерации PDF');
+            throw new Error(msg);
         })
         .catch(error => {
             console.error('Ошибка:', error);
-            alert('Произошла ошибка при скачивании резюме');
+            if (String(error?.message || '').includes('Требуется авторизация')) {
+                alert('Требуется авторизация для скачивания PDF');
+                window.location.href = '/pages/login';
+                return;
+            }
+            alert(`Не удалось скачать резюме: ${error.message || 'неизвестная ошибка'}`);
         });
     }
 
@@ -541,9 +590,28 @@ class CVBuilder {
         // Сохранение данных перед предварительным просмотром
         this.saveData();
         
-        // Открытие страницы предварительного просмотра
-        const previewUrl = `/pages/cv-preview?data=${encodeURIComponent(JSON.stringify(this.userData))}`;
-        window.open(previewUrl, '_blank');
+        // Не передаём большие данные в URL (предотвращаем HTTP 431)
+        // Данные уже сохранены в localStorage и будут прочитаны страницей превью
+        window.open('/pages/cv-preview', '_blank');
+    }
+
+    applyTemplateFromQuery() {
+        try {
+            const url = new URL(window.location.href);
+            const tpl = url.searchParams.get('template');
+            const allowed = new Set(['modern','classic','minimal','creative']);
+            if (tpl && allowed.has(tpl)) {
+                this.userData.template = tpl;
+                // визуально отметить
+                document.querySelectorAll('.template-option').forEach(btn => {
+                    if (btn.dataset.template === tpl) {
+                        btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                    } else {
+                        btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                    }
+                });
+            }
+        } catch (_) {}
     }
 
     getDocumentTitle() {
@@ -558,7 +626,9 @@ class CVBuilder {
             education: [],
             skills: [],
             languages: [],
-            additionalSections: {}
+            additionalSections: {},
+            template: this.userData.template || 'modern',
+            settings: this.userData.settings || { fontSize: 'medium', colorScheme: 'blue', includePhoto: true }
         };
 
         // Сбор персональных данных
@@ -602,7 +672,7 @@ class CVBuilder {
         });
 
         // Сбор дополнительных секций
-        ['profile', 'projects', 'certificates'].forEach(section => {
+        ['profile', 'projects', 'certificates', 'courses', 'internships', 'activities', 'references', 'qualities', 'achievements', 'signature', 'footer', 'custom'].forEach(section => {
             const container = document.getElementById(`${section}-items`);
             if (container) {
                 const textarea = container.querySelector('textarea');
@@ -675,6 +745,18 @@ class CVBuilder {
 
         // Заполнение разделов
         // TODO: Добавить восстановление элементов разделов
+
+        // Отметить выбранный шаблон
+        if (this.userData.template) {
+            const current = this.userData.template;
+            document.querySelectorAll('.template-option').forEach(btn => {
+                if (btn.dataset.template === current) {
+                    btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                } else {
+                    btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                }
+            });
+        }
     }
 
     setupAutoSave() {
@@ -687,6 +769,20 @@ class CVBuilder {
         window.addEventListener('beforeunload', () => {
             this.saveData();
         });
+    }
+
+    selectTemplate(templateName) {
+        if (!templateName) return;
+        this.userData.template = templateName;
+        // Обновить визуальную подсветку выбранного шаблона
+        document.querySelectorAll('.template-option').forEach(btn => {
+            if (btn.dataset.template === templateName) {
+                btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+            } else {
+                btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+            }
+        });
+        this.saveData();
     }
 }
 

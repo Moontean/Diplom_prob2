@@ -8,9 +8,12 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database');
 const User = require('./models/User');
 const CV = require('./models/CV');
+const Assessment = require('./models/Assessment');
+const { generateAssessment, evaluateOpenAnswer } = require('./services/llm');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -24,10 +27,11 @@ connectDB().then((conn) => {
 
 // Fallback: простая база данных пользователей в памяти (если MongoDB недоступна)
 const users = new Map();
+const assessments = new Map();
 
-// Настройка middleware
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
+// Настройка middleware (увеличиваем лимит тела запроса для больших CV/фото)
+app.use(bodyParser.urlencoded({ extended: true, limit: '15mb' }));
+app.use(bodyParser.json({ limit: '15mb' }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cv-builder-secret-key',
   resave: false,
@@ -45,6 +49,14 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
+});
+
+// Ограничитель для генерации тестов
+const generateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 // Главная страница
@@ -505,23 +517,178 @@ app.post('/api/cv/upload-photo', requireAuth, upload.single('photo'), (req, res)
 // Экспорт CV в PDF
 app.post('/api/cv/download', requireAuth, async (req, res) => {
   try {
-    const cvData = req.body;
-    
-    // Здесь можно добавить генерацию PDF с помощью библиотек типа puppeteer или jsPDF
-    // Пока что возвращаем заглушку
-    res.json({
-      success: false,
-      message: 'Функция экспорта в PDF находится в разработке'
-    });
+    const PDFDocument = require('pdfkit');
+    const cv = req.body || {};
+    const fs = require('fs');
+
+    // Выбор системного шрифта с поддержкой кириллицы (Windows/Linux)
+    const pickFont = () => {
+      const candidates = [
+        { regular: 'C:/Windows/Fonts/arial.ttf', bold: 'C:/Windows/Fonts/arialbd.ttf' },
+        { regular: 'C:/Windows/Fonts/segoeui.ttf', bold: 'C:/Windows/Fonts/seguisb.ttf' },
+        { regular: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', bold: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' },
+        { regular: '/usr/share/fonts/truetype/freefont/FreeSans.ttf', bold: '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf' }
+      ];
+      for (const p of candidates) {
+        if (fs.existsSync(p.regular)) {
+          return p;
+        }
+      }
+      return null;
+    };
+    const fontPaths = pickFont();
+
+    // Маппинг акцентного цвета по шаблону
+    const accentMap = {
+      modern: '#2563eb',
+      classic: '#111827',
+      minimal: '#374151',
+      creative: '#7c3aed'
+    };
+    const accent = accentMap[cv.template] || accentMap.modern;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    const filename = `${(cv.title || 'resume').replace(/[^\w\-]+/g, '_')}.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    doc.pipe(res);
+
+    // Заголовок
+    if (fontPaths) doc.font(fontPaths.bold);
+    doc.fillColor(accent).fontSize(22).text(cv.title || 'Моё резюме', { continued: false });
+    if (fontPaths) doc.font(fontPaths.regular);
+
+    // Подзаголовок (должность)
+    const p = cv.personalInfo || {};
+    const headline = p['job-position'] || p.jobPosition || '';
+    if (headline) {
+      if (fontPaths) doc.font(fontPaths.regular);
+      doc.moveDown(0.3).fillColor('#374151').fontSize(12).text(headline);
+    }
+
+    // Контакты в строку
+    const contacts = [
+      p.email ? `Email: ${p.email}` : null,
+      p.phone ? `Тел: ${p.phone}` : null,
+      p.city ? `Город: ${p.city}` : null,
+      p.website ? `Сайт: ${p.website}` : null,
+      p.linkedin ? `LinkedIn: ${p.linkedin}` : null
+    ].filter(Boolean);
+    if (contacts.length) {
+      if (fontPaths) doc.font(fontPaths.regular);
+      doc.moveDown(0.5).fillColor('#6b7280').fontSize(10).text(contacts.join('  •  '));
+    }
+
+    // Фото (если base64)
+    const photo = p.photo;
+    if (photo && typeof photo === 'string' && photo.startsWith('data:image/')) {
+      try {
+        const base64 = photo.split(',')[1];
+        const buf = Buffer.from(base64, 'base64');
+        doc.image(buf, doc.page.width - 50 - 72, 50, { width: 72, height: 72, fit: [72,72] })
+           .roundRect(doc.page.width - 50 - 72, 50, 72, 72, 36).strokeColor('#e5e7eb').stroke();
+      } catch (_) {}
+    }
+
+    const addSection = (title) => {
+      if (fontPaths) doc.font(fontPaths.bold);
+      doc.moveDown().fillColor(accent).fontSize(14).text(title);
+      doc.moveTo(50, doc.y + 2).lineTo(doc.page.width - 50, doc.y + 2).strokeColor('#e5e7eb').stroke();
+      doc.moveDown(0.3);
+      if (fontPaths) doc.font(fontPaths.regular);
+      doc.fillColor('#111827').fontSize(11);
+    };
+
+    // Персональные данные (кроме того, что уже показали)
+    const personalPairs = [];
+    const fullName = [p['given-name'] || p.givenName, p['family-name'] || p.familyName].filter(Boolean).join(' ');
+    if (fullName) personalPairs.push(['Имя', fullName]);
+    if (p.address) personalPairs.push(['Адрес', p.address]);
+    if (p['postal-code'] || p.postalCode) personalPairs.push(['Индекс', p['postal-code'] || p.postalCode]);
+    if (personalPairs.length) {
+      addSection('Персональные данные');
+      personalPairs.forEach(([k, v]) => doc.text(`${k}: ${v}`));
+    }
+
+    // Опыт работы
+    const employment = Array.isArray(cv.employment) ? cv.employment : [];
+    if (employment.length) {
+      addSection('Опыт работы');
+      employment.forEach((item) => {
+        const position = [item.position, item.company].filter(Boolean).join(' · ');
+        const period = [item.start_date || item.startDate, item.current ? 'по наст. время' : (item.end_date || item.endDate)].filter(Boolean).join(' — ');
+        if (position) doc.fontSize(12).text(position);
+        if (period) doc.fillColor('#6b7280').fontSize(10).text(period);
+        if (item.description) doc.fillColor('#111827').fontSize(11).text(item.description);
+        doc.moveDown(0.5);
+        doc.fillColor('#111827');
+      });
+    }
+
+    // Образование
+    const education = Array.isArray(cv.education) ? cv.education : [];
+    if (education.length) {
+      addSection('Образование');
+      education.forEach((item) => {
+        const school = item.school || '';
+        const degree = [item.degree, item.level].filter(Boolean).join(' · ');
+        const years = [item.start_year || item.startYear, item.end_year || item.endYear].filter(Boolean).join(' — ');
+        if (school) doc.fontSize(12).text(school);
+        if (degree) doc.fillColor('#6b7280').fontSize(10).text(degree);
+        if (years) doc.fillColor('#6b7280').fontSize(10).text(years);
+        doc.moveDown(0.5);
+        doc.fillColor('#111827');
+      });
+    }
+
+    // Навыки
+    const skills = Array.isArray(cv.skills) ? cv.skills : [];
+    if (skills.length) {
+      addSection('Навыки');
+      const line = skills.map(s => `${s.skill || ''}${s.level ? ' · ' + s.level : ''}`).filter(Boolean).join('  •  ');
+      if (line) doc.text(line);
+    }
+
+    // Языки
+    const languages = Array.isArray(cv.languages) ? cv.languages : [];
+    if (languages.length) {
+      addSection('Языки');
+      const line = languages.map(l => `${l.language || ''}${l.level ? ' · ' + l.level : ''}`).filter(Boolean).join('  •  ');
+      if (line) doc.text(line);
+    }
+
+    // Дополнительные разделы
+    const add = cv.additionalSections || {};
+    const titleMap = {
+      profile: 'Профиль', projects: 'Проекты', certificates: 'Сертификаты', courses: 'Курсы', internships: 'Стажировки',
+      activities: 'Дополнительные виды деятельности', references: 'Рекомендации', qualities: 'Качества', achievements: 'Достижения',
+      signature: 'Подпись', footer: 'Нижний колонтитул', custom: 'Собственный раздел'
+    };
+    for (const [key, content] of Object.entries(add)) {
+      if (!content) continue;
+      addSection(titleMap[key] || key);
+      doc.text(String(content));
+    }
+
+    doc.end();
   } catch (error) {
     console.error('Ошибка экспорта PDF:', error);
-    res.status(500).json({ success: false, message: 'Ошибка сервера' });
+    // В случае ошибки — корректный JSON
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Ошибка сервера при экспорте PDF' });
+    }
   }
 });
 
 // Маршрут для CV Builder страницы
 app.get('/pages/cv-builder', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'cv-builder.html'));
+});
+
+// Страница предварительного просмотра CV
+app.get('/pages/cv-preview', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pages', 'cv-preview.html'));
 });
 
 app.listen(PORT, () => {
@@ -546,4 +713,189 @@ app.listen(PORT, () => {
   console.log('   DELETE /api/cv/:id');
   console.log('   POST /api/cv/upload-photo');
   console.log('   POST /api/cv/download');
+  console.log('🧪 Assessment API маршруты:');
+  console.log('   POST /api/assessment/generate');
+  console.log('   POST /api/assessment/submit');
+  console.log('   GET  /api/assessment/:id');
+  console.log('   GET  /api/assessment');
+});
+
+// ===== API МАРШРУТЫ ДЛЯ ОЦЕНОК (AI ТЕСТЫ) =====
+
+// Генерация теста
+app.post('/api/assessment/generate', requireAuth, generateLimiter, async (req, res) => {
+  const { profession, difficulty = 'junior', numQuestions = 10, mix = 'mixed' } = req.body || {};
+  if (!profession || typeof profession !== 'string') {
+    return res.status(400).json({ success: false, message: 'Укажите профессию' });
+  }
+  try {
+    const data = await generateAssessment({ profession, difficulty, numQuestions, mix });
+
+    // Разделим answerKey и вопросы
+    const answerKey = [];
+    const questions = data.questions.map(q => {
+      if (q.type === 'mcq' && typeof q.correctIndex === 'number') {
+        answerKey.push({ id: q.id, correctIndex: q.correctIndex });
+        // Не возвращаем правильный ответ на клиент
+        const { correctIndex, ...rest } = q;
+        return rest;
+      }
+      return q;
+    });
+
+    let assessmentId;
+    if (isDBConnected) {
+      const doc = new Assessment({
+        userId: req.session.userId,
+        profession,
+        difficulty,
+        numQuestions,
+        questions,
+        answerKey
+      });
+      await doc.save();
+      assessmentId = doc._id.toString();
+    } else {
+      // In-memory
+      assessmentId = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      assessments.set(assessmentId, {
+        _id: assessmentId,
+        userId: req.session.userId,
+        profession,
+        difficulty,
+        numQuestions,
+        questions,
+        answerKey,
+        submissions: [],
+        createdAt: new Date()
+      });
+    }
+
+    res.json({ success: true, assessmentId, questions });
+  } catch (error) {
+    console.error('Ошибка генерации теста:', error);
+    const msg = error?.message?.includes('Gemini') ? 'Проблема с AI провайдером' : 'Ошибка сервера';
+    res.status(500).json({ success: false, message: msg });
+  }
+});
+
+// Отправка ответов и оценка
+app.post('/api/assessment/submit', requireAuth, async (req, res) => {
+  const { assessmentId, answers } = req.body || {};
+  if (!assessmentId || !Array.isArray(answers)) {
+    return res.status(400).json({ success: false, message: 'Неверные параметры' });
+  }
+  try {
+    let assessment;
+    if (isDBConnected) {
+      assessment = await Assessment.findOne({ _id: assessmentId, userId: req.session.userId });
+    } else {
+      assessment = assessments.get(assessmentId);
+      if (assessment && assessment.userId?.toString() !== req.session.userId?.toString()) {
+        assessment = null;
+      }
+    }
+    if (!assessment) {
+      return res.status(404).json({ success: false, message: 'Тест не найден' });
+    }
+
+    const byId = new Map(assessment.questions.map(q => [q.id, q]));
+    const keyById = new Map(assessment.answerKey.map(k => [k.id, k.correctIndex]));
+
+    const breakdown = [];
+    let totalScore = 0;
+    for (const item of answers) {
+      const q = byId.get(item.id);
+      if (!q) continue;
+      if (q.type === 'mcq') {
+        const correctIndex = keyById.get(q.id);
+        const isCorrect = typeof correctIndex === 'number' && item.answer === correctIndex;
+        breakdown.push({ id: q.id, type: q.type, correct: isCorrect, score: isCorrect ? 1 : 0, reasoning: isCorrect ? 'Верно' : 'Неверно' });
+        totalScore += isCorrect ? 1 : 0;
+      } else if (q.type === 'open') {
+        const evalRes = await evaluateOpenAnswer({ question: q, answer: String(item.answer || '') });
+        breakdown.push({ id: q.id, type: q.type, correct: undefined, score: evalRes.score, reasoning: evalRes.reasoning });
+        totalScore += evalRes.score;
+      }
+    }
+
+    // Нормируем по числу вопросов
+    const normalizedScore = assessment.questions.length ? totalScore / assessment.questions.length : 0;
+
+    // Сохранение сабмита
+    const submission = {
+      answers: answers.map(a => ({ id: a.id, answer: a.answer, score: breakdown.find(b => b.id === a.id)?.score || null, feedback: breakdown.find(b => b.id === a.id)?.reasoning || '' })),
+      totalScore: normalizedScore,
+      breakdown,
+      evaluatedAt: new Date()
+    };
+
+    if (isDBConnected) {
+      assessment.submissions.push(submission);
+      await assessment.save();
+    } else {
+      assessment.submissions.push(submission);
+      assessments.set(assessmentId, assessment);
+    }
+
+    res.json({ success: true, score: normalizedScore, breakdown });
+  } catch (error) {
+    console.error('Ошибка оценки теста:', error);
+    const msg = error?.message?.includes('Gemini') ? 'Проблема с AI провайдером' : 'Ошибка сервера';
+    res.status(500).json({ success: false, message: msg });
+  }
+});
+
+// Получить тест
+app.get('/api/assessment/:id', requireAuth, async (req, res) => {
+  const id = req.params.id;
+  try {
+    let assessment;
+    if (isDBConnected) {
+      assessment = await Assessment.findOne({ _id: id, userId: req.session.userId });
+    } else {
+      assessment = assessments.get(id);
+      if (assessment && assessment.userId?.toString() !== req.session.userId?.toString()) {
+        assessment = null;
+      }
+    }
+    if (!assessment) return res.status(404).json({ success: false, message: 'Тест не найден' });
+
+    // Не отдаём answerKey
+    const { answerKey, ...rest } = assessment.toObject ? assessment.toObject() : assessment;
+    res.json({ success: true, assessment: rest });
+  } catch (error) {
+    console.error('Ошибка получения теста:', error);
+    res.status(500).json({ success: false, message: 'Ошибка сервера' });
+  }
+});
+
+// Список тестов пользователя
+app.get('/api/assessment', requireAuth, async (req, res) => {
+  try {
+    let list = [];
+    if (isDBConnected) {
+      list = await Assessment.findByUserId(req.session.userId);
+      list = list.map(doc => ({
+        _id: doc._id,
+        profession: doc.profession,
+        difficulty: doc.difficulty,
+        numQuestions: doc.numQuestions,
+        createdAt: doc.createdAt,
+        submissionsCount: doc.submissions?.length || 0
+      }));
+    } else {
+      for (const v of assessments.values()) {
+        if (v.userId?.toString() === req.session.userId?.toString()) {
+          list.push({ _id: v._id, profession: v.profession, difficulty: v.difficulty, numQuestions: v.numQuestions, createdAt: v.createdAt, submissionsCount: v.submissions?.length || 0 });
+        }
+      }
+      // сортировка по дате
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+    res.json({ success: true, assessments: list });
+  } catch (error) {
+    console.error('Ошибка списка тестов:', error);
+    res.status(500).json({ success: false, message: 'Ошибка сервера' });
+  }
 });

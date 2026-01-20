@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Предварительный просмотр резюме</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; }
+    /* Базовые темы шаблонов */
+    .tpl-modern { --accent:#2563eb; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(37,99,235,.08); --chip-bd:#bfdbfe; }
+    .tpl-classic { --accent:#111827; --bg:#ffffff; --muted:#4b5563; --chip-bg:#f3f4f6; --chip-bd:#e5e7eb; }
+    .tpl-minimal { --accent:#374151; --bg:#ffffff; --muted:#9ca3af; --chip-bg:#ffffff; --chip-bd:#e5e7eb; }
+    .tpl-creative { --accent:#7c3aed; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(124,58,237,.08); --chip-bd:#c4b5fd; }
+
+    .cv-card { background: var(--bg); }
+    .accent { color: var(--accent); }
+    .muted { color: var(--muted); }
+    .divider { border-color: var(--muted); opacity: .2; }
+
+    /* Дополнительные вариации оформления для шаблонов */
+    /* Classic */
+    .tpl-classic .cv-card { border: 1px solid #e5e7eb; }
+    .tpl-classic h1, .tpl-classic h2 { font-family: Georgia, 'Times New Roman', serif; letter-spacing: .2px; }
+    .tpl-classic .section-head { border-left: 4px solid var(--accent); padding-left: .75rem; }
+
+    /* Minimal */
+    .tpl-minimal .divider { display:none; }
+    .tpl-minimal .section-head { text-transform: uppercase; font-size: .75rem; letter-spacing: .08em; color: var(--muted); }
+    .tpl-minimal .cv-card { box-shadow: none; border: 1px dashed #e5e7eb; }
+
+    /* Creative */
+    .tpl-creative .cv-header { background: linear-gradient(135deg, var(--accent) 0%, #22d3ee 100%); color: white; border-radius: .5rem; }
+    .tpl-creative .cv-title { color: #fff; }
+    .tpl-creative .accent { color: #fff; }
+    .tpl-creative .section-head { color: var(--accent); }
+
+    /* Chips */
+    .chip { background: var(--chip-bg); border: 1px solid var(--chip-bd); }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-4xl mx-auto p-6">
+    <!-- Панель выбора шаблона -->
+    <div class="flex items-center justify-between mb-4">
+      <div class="text-sm text-gray-500">Выберите шаблон:</div>
+      <div class="flex gap-2" id="tplPicker">
+        <button type="button" data-tpl="modern" class="px-3 py-1 text-sm rounded border">Современный</button>
+        <button type="button" data-tpl="classic" class="px-3 py-1 text-sm rounded border">Классический</button>
+        <button type="button" data-tpl="minimal" class="px-3 py-1 text-sm rounded border">Минималистичный</button>
+        <button type="button" data-tpl="creative" class="px-3 py-1 text-sm rounded border">Креативный</button>
+      </div>
+    </div>
+
+    <div id="cvRoot" class="cv-card shadow rounded-lg p-6 tpl-modern">
+      <div class="cv-header p-4 -mx-4 -mt-4 mb-2 rounded">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 id="cvTitle" class="cv-title text-2xl font-bold">Моё резюме</h1>
+            <div id="cvHeadline" class="text-sm muted"></div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="cvTemplate" class="text-xs px-2 py-1 rounded border bg-white/70">modern</span>
+            <div id="cvPhotoWrap" class="w-16 h-16 rounded-full overflow-hidden border hidden">
+              <img id="cvPhoto" alt="photo" class="w-full h-full object-cover"/>
+            </div>
+          </div>
+        </div>
+      </div>
+      <hr class="my-4 divider">
+
+      <section id="personalInfo" class="mb-6">
+        <h2 class="section-head text-lg font-semibold accent">Персональные данные</h2>
+        <div id="personalFields" class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+      </section>
+
+      <section id="employment" class="mb-6 hidden">
+        <h2 class="section-head text-lg font-semibold accent">Опыт работы</h2>
+        <div id="employmentList" class="mt-2 space-y-3"></div>
+      </section>
+
+      <section id="education" class="mb-6 hidden">
+        <h2 class="section-head text-lg font-semibold accent">Образование</h2>
+        <div id="educationList" class="mt-2 space-y-3"></div>
+      </section>
+
+      <section id="skills" class="mb-6 hidden">
+        <h2 class="section-head text-lg font-semibold accent">Навыки</h2>
+        <div id="skillsList" class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+      </section>
+
+      <section id="languages" class="mb-6 hidden">
+        <h2 class="section-head text-lg font-semibold accent">Языки</h2>
+        <div id="languagesList" class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+      </section>
+
+      <section id="additional" class="mb-6 hidden">
+        <h2 class="section-head text-lg font-semibold accent">Дополнительно</h2>
+        <div id="additionalContent" class="mt-2 space-y-2"></div>
+      </section>
+
+      <div class="mt-6 flex gap-3">
+        <a href="/pages/cv-builder" class="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white">Редактировать</a>
+        <button id="applyTplBtn" class="inline-flex items-center px-4 py-2 rounded border">Применить шаблон</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function getData() {
+      try {
+        const url = new URL(window.location.href);
+        const raw = url.searchParams.get('data');
+        if (raw) return JSON.parse(decodeURIComponent(raw));
+      } catch (_) {}
+      try {
+        const local = localStorage.getItem('cvBuilderData');
+        if (local) return JSON.parse(local);
+      } catch (_) {}
+      return {};
+    }
+
+    function applyTemplate(root, template) {
+      root.classList.remove('tpl-modern','tpl-classic','tpl-minimal','tpl-creative');
+      const map = { modern:'tpl-modern', classic:'tpl-classic', minimal:'tpl-minimal', creative:'tpl-creative' };
+      root.classList.add(map[template] || 'tpl-modern');
+      // подсветка кнопок выбора
+      document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
+        if (btn.dataset.tpl === template) {
+          btn.classList.add('border-blue-400','ring-2','ring-blue-200');
+        } else {
+          btn.classList.remove('border-blue-400','ring-2','ring-blue-200');
+        }
+      });
+    }
+
+    function render() {
+      const data = getData();
+      const titleEl = document.getElementById('cvTitle');
+      const tplEl = document.getElementById('cvTemplate');
+      const root = document.getElementById('cvRoot');
+      const headlineEl = document.getElementById('cvHeadline');
+      const photoWrap = document.getElementById('cvPhotoWrap');
+      const photoImg = document.getElementById('cvPhoto');
+      titleEl.textContent = data.title || 'Моё резюме';
+      tplEl.textContent = data.template || 'modern';
+      applyTemplate(root, data.template || 'modern');
+      // заголовок-"позиция"
+      const pinfo = data.personalInfo || {};
+      headlineEl.textContent = pinfo['job-position'] || pinfo.jobPosition || '';
+      // фото
+      if (pinfo.photo) {
+        photoImg.src = pinfo.photo;
+        photoWrap.classList.remove('hidden');
+      } else {
+        photoWrap.classList.add('hidden');
+      }
+
+      // Personal info
+      const pf = document.getElementById('personalFields');
+      pf.innerHTML = '';
+      const p = data.personalInfo || {};
+      const fields = [
+        ['Имя', p['given-name']||p.givenName],
+        ['Фамилия', p['family-name']||p.familyName],
+        ['Должность', p['job-position']||p.jobPosition],
+        ['Email', p.email],
+        ['Телефон', p.phone],
+        ['Адрес', p.address],
+        ['Индекс', p['postal-code']||p.postalCode],
+        ['Город', p.city],
+        ['Дата рождения', p.birthdate],
+        ['Сайт', p.website],
+        ['LinkedIn', p.linkedin]
+      ];
+      const hasPersonal = fields.some(([_, v]) => !!v);
+      document.getElementById('personalInfo').classList.toggle('hidden', !hasPersonal);
+      fields.forEach(([label, value]) => {
+        if (!value) return;
+        const el = document.createElement('div');
+        el.className = 'text-sm';
+        el.innerHTML = `<span class="muted">${label}:</span> <span>${value}</span>`;
+        pf.appendChild(el);
+      });
+
+      // Employment
+      const emp = Array.isArray(data.employment) ? data.employment : [];
+      document.getElementById('employment').classList.toggle('hidden', emp.length===0);
+      const empList = document.getElementById('employmentList');
+      empList.innerHTML = '';
+      emp.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'p-3 rounded border';
+        const period = [item.start_date||item.startDate, item.current ? 'по наст. время' : (item.end_date||item.endDate || '')].filter(Boolean).join(' — ');
+        div.innerHTML = `<div class="font-medium">${item.position||''} · ${item.company||''}</div>
+                         <div class="text-sm muted">${period}</div>
+                         ${item.description ? `<div class="text-sm mt-1">${item.description}</div>` : ''}`;
+        empList.appendChild(div);
+      });
+
+      // Education
+      const edu = Array.isArray(data.education) ? data.education : [];
+      document.getElementById('education').classList.toggle('hidden', edu.length===0);
+      const eduList = document.getElementById('educationList');
+      eduList.innerHTML = '';
+      edu.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'p-3 rounded border';
+        const years = [item.start_year||item.startYear, item.end_year||item.endYear].filter(Boolean).join(' — ');
+        div.innerHTML = `<div class="font-medium">${item.school||''}</div>
+                         <div class="text-sm muted">${item.degree||''} ${item.level ? '· '+item.level : ''}</div>
+                         ${years ? `<div class="text-sm muted">${years}</div>` : ''}`;
+        eduList.appendChild(div);
+      });
+
+      // Skills
+      const skills = Array.isArray(data.skills) ? data.skills : [];
+      document.getElementById('skills').classList.toggle('hidden', skills.length===0);
+      const skillsList = document.getElementById('skillsList');
+      skillsList.innerHTML = '';
+      skills.forEach(item => {
+        const pill = document.createElement('div');
+        pill.className = 'chip px-3 py-1 rounded-full text-sm';
+        pill.textContent = `${item.skill||''}${item.level ? ' · '+item.level : ''}`;
+        skillsList.appendChild(pill);
+      });
+
+      // Languages
+      const langs = Array.isArray(data.languages) ? data.languages : [];
+      document.getElementById('languages').classList.toggle('hidden', langs.length===0);
+      const languagesList = document.getElementById('languagesList');
+      languagesList.innerHTML = '';
+      langs.forEach(item => {
+        const pill = document.createElement('div');
+        pill.className = 'chip px-3 py-1 rounded-full text-sm';
+        pill.textContent = `${item.language||''}${item.level ? ' · '+item.level : ''}`;
+        languagesList.appendChild(pill);
+      });
+
+      // Additional sections
+      const add = data.additionalSections || {};
+      const addRoot = document.getElementById('additional');
+      const addCont = document.getElementById('additionalContent');
+      addCont.innerHTML = '';
+      const titleMap = {
+        profile: 'Профиль',
+        projects: 'Проекты',
+        certificates: 'Сертификаты',
+        courses: 'Курсы',
+        internships: 'Стажировки',
+        activities: 'Дополнительные виды деятельности',
+        references: 'Рекомендации',
+        qualities: 'Качества',
+        achievements: 'Достижения',
+        signature: 'Подпись',
+        footer: 'Нижний колонтитул',
+        custom: 'Собственный раздел'
+      };
+      const entries = Object.entries(add).filter(([_, v]) => !!v);
+      if (entries.length) {
+        addRoot.classList.remove('hidden');
+        entries.forEach(([key, content]) => {
+          const div = document.createElement('div');
+          div.innerHTML = `<div class="font-medium">${titleMap[key] || key}</div><div class="text-sm">${content}</div>`;
+          addCont.appendChild(div);
+        });
+      } else {
+        addRoot.classList.add('hidden');
+      }
+    }
+
+    function persistTemplate(tpl) {
+      try {
+        const local = localStorage.getItem('cvBuilderData');
+        const data = local ? JSON.parse(local) : {};
+        data.template = tpl;
+        localStorage.setItem('cvBuilderData', JSON.stringify(data));
+      } catch (_) {}
+    }
+
+    // Слушатели выбора шаблона на странице превью
+    document.addEventListener('DOMContentLoaded', () => {
+      render();
+      document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tpl = btn.dataset.tpl;
+          const root = document.getElementById('cvRoot');
+          applyTemplate(root, tpl);
+          document.getElementById('cvTemplate').textContent = tpl;
+          persistTemplate(tpl);
+        });
+      });
+      const applyBtn = document.getElementById('applyTplBtn');
+      applyBtn.addEventListener('click', () => {
+        const tpl = document.getElementById('cvTemplate').textContent;
+        persistTemplate(tpl);
+        // небольшая визуальная обратная связь
+        applyBtn.classList.add('bg-green-50');
+        setTimeout(()=>applyBtn.classList.remove('bg-green-50'), 300);
+      });
+    });
+  </script>
+</body>
+</html>
