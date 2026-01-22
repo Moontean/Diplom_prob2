@@ -722,6 +722,11 @@ app.listen(PORT, () => {
 
 // ===== API МАРШРУТЫ ДЛЯ ОЦЕНОК (AI ТЕСТЫ) =====
 
+// Страница тестов (UI)
+app.get('/pages/assessment', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pages', 'assessment.html'));
+});
+
 // Генерация теста
 app.post('/api/assessment/generate', requireAuth, generateLimiter, async (req, res) => {
   const { profession, difficulty = 'junior', numQuestions = 10, mix = 'mixed' } = req.body || {};

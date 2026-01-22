@@ -33,6 +33,9 @@
             <div class="dropdown-item">
               <a href="/pages/articles">Статьи</a>
             </div>
+            <div class="dropdown-item">
+              <a href="/pages/assessment">AI Тест на профпригодность</a>
+            </div>
           </div>
         </div>
         <a class="nav-link" href="/pages/pricing">Цены</a>
@@ -195,6 +198,9 @@
         </div>
         <a class="btn btn-primary cta" href="/pages/cv-builder">Создать резюме</a>
       `;
+
+      // Загрузка списка резюме
+      loadResumesList();
     }
 
     function showError() {
@@ -218,6 +224,79 @@
 
     function showSettings() {
       alert('Раздел настроек находится в разработке');
+    }
+
+    async function loadResumesList() {
+      try {
+        const resp = await fetch('/api/cv/list');
+        const data = await resp.json();
+        if (!resp.ok || !data?.success) throw new Error('Ошибка загрузки резюме');
+        const cvs = Array.isArray(data.cvs) ? data.cvs : [];
+        document.getElementById('resumeCount').textContent = String(cvs.length);
+        const listRoot = document.getElementById('resumesList');
+        if (cvs.length === 0) {
+          listRoot.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: #6b7280;">
+              <div style="font-size: 4rem; margin-bottom: 1rem;">📄</div>
+              <h3 style="margin-bottom: 1rem;">У вас пока нет резюме</h3>
+              <p style="margin-bottom: 2rem;">Создайте ваше первое профессиональное резюме прямо сейчас</p>
+              <a href="/pages/cv-builder" class="btn btn-primary">Создать резюме</a>
+            </div>`;
+          return;
+        }
+        // Рендер списка
+        listRoot.innerHTML = cvs.map(cv => {
+          const title = cv.title || 'Без названия';
+          const sub = [cv.personalInfo?.jobPosition, cv.personalInfo?.fullName].filter(Boolean).join(' · ');
+          const date = cv.updatedAt ? new Date(cv.updatedAt).toLocaleString() : '';
+          return `
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:1rem; border:1px solid #e5e7eb; border-radius:.75rem; margin-bottom:.75rem;">
+              <div>
+                <div style="font-weight:600; color:#111827;">${title}</div>
+                <div style="font-size:.875rem; color:#6b7280;">${sub || ''}</div>
+                <div style="font-size:.75rem; color:#9ca3af;">${date}</div>
+              </div>
+              <div style="display:flex; gap:.5rem;">
+                <button onclick="editCV('${cv._id}')" class="btn btn-outline">Редактировать</button>
+                <button onclick="previewCV('${cv._id}')" class="btn btn-outline">Превью</button>
+                <button onclick="deleteCV('${cv._id}')" class="btn btn-primary" style="background:#ef4444; border-color:#ef4444;">Удалить</button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function editCV(id) {
+      // Открыть конструктор с загрузкой по id
+      window.location.href = `/pages/cv-builder?id=${encodeURIComponent(id)}`;
+    }
+
+    async function previewCV(id) {
+      try {
+        const resp = await fetch(`/api/cv/${id}`);
+        const data = await resp.json();
+        if (resp.ok && data?.success && data.cv) {
+          localStorage.setItem('cvBuilderData', JSON.stringify(data.cv));
+          window.open('/pages/cv-preview', '_blank');
+        }
+      } catch (e) {
+        console.error('Ошибка превью CV:', e);
+      }
+    }
+
+    async function deleteCV(id) {
+      if (!confirm('Удалить это резюме?')) return;
+      try {
+        const resp = await fetch(`/api/cv/${id}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (resp.ok && data?.success) {
+          loadResumesList();
+        }
+      } catch (e) {
+        console.error('Ошибка удаления CV:', e);
+      }
     }
 
     // Загружаем дашборд при загрузке страницы

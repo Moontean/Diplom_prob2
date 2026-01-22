@@ -5,6 +5,9 @@ const Groq = require('groq-sdk');
 const { z } = require('zod');
 
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+const OAI_BASE_URL = process.env.OPENAI_BASE_URL || process.env.OAI_BASE_URL || 'http://127.0.0.1:1234/v1';
+const OAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OAI_API_KEY || '';
+const OAI_MODEL = process.env.OPENAI_MODEL || process.env.OAI_MODEL || 'llm openai/gpt-oss-20b';
 
 // Инициализация клиентов под выбранного провайдера
 let geminiModel = null;
@@ -33,21 +36,21 @@ try {
 
 // ===== Схемы валидации =====
 const MCQQuestionSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().trim().min(1),
   type: z.literal('mcq'),
-  prompt: z.string().min(10),
-  options: z.array(z.string().min(1)).min(2).max(6),
+  prompt: z.string().trim().min(10),
+  options: z.array(z.string().trim().min(1)).min(2).max(6),
   correctIndex: z.number().int().min(0),
-  explanation: z.string().optional()
+  explanation: z.string().trim().min(1).optional()
 });
 
 const OpenQuestionSchema = z.object({
-  id: z.string().min(1),
+  id: z.string().trim().min(1),
   type: z.literal('open'),
-  prompt: z.string().min(10),
+  prompt: z.string().trim().min(10),
   rubric: z.object({
-    keyPoints: z.array(z.string().min(2)).min(2),
-    scoring: z.string().min(5)
+    keyPoints: z.array(z.string().trim().min(2)).min(2),
+    scoring: z.string().trim().min(5)
   })
 });
 
@@ -78,13 +81,19 @@ function extractJSON(text) {
 }
 
 async function callLLM(prompt) {
-  if (AI_PROVIDER === 'gemini') {
+  // Авто-фолбэк: если выбран gemini, но не инициализирован и задан OpenAI-совместимый хост — используем openai
+  let provider = AI_PROVIDER;
+  if (provider === 'gemini' && !geminiModel && OAI_BASE_URL) {
+    provider = 'openai';
+  }
+
+  if (provider === 'gemini') {
     if (!geminiModel) throw new Error('Gemini model is not initialized');
     const response = await geminiModel.generateContent(prompt);
     const text = response?.response?.text?.() || response?.text?.();
     return text || '';
   }
-  if (AI_PROVIDER === 'groq') {
+  if (provider === 'groq') {
     if (!groqClient) throw new Error('Groq client is not initialized');
     const completion = await groqClient.chat.completions.create({
       model: 'llama-3.1-70b-versatile',
@@ -96,7 +105,32 @@ async function callLLM(prompt) {
     });
     return completion?.choices?.[0]?.message?.content || '';
   }
-  throw new Error(`Unsupported AI provider: ${AI_PROVIDER}`);
+  if (provider === 'openai' || provider === 'openai_local' || provider === 'openai-compatible') {
+    if (typeof fetch !== 'function') {
+      throw new Error('Fetch is not available in this Node version. Use Node 18+ or add a fetch polyfill.');
+    }
+    const base = OAI_BASE_URL.replace(/\/$/, '');
+    const url = `${base}/chat/completions`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (OAI_API_KEY) headers['Authorization'] = `Bearer ${OAI_API_KEY}`;
+    const body = {
+      model: OAI_MODEL,
+      messages: [
+        { role: 'system', content: 'You are a precise assistant. Return only JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.3
+    };
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`OpenAI-compatible error: ${res.status} ${errText}`);
+    }
+    const json = await res.json();
+    const content = json?.choices?.[0]?.message?.content || json?.choices?.[0]?.text || '';
+    return content || '';
+  }
+  throw new Error(`Unsupported AI provider: ${provider}`);
 }
 
 function sanitizeAndValidate(obj) {

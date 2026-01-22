@@ -2,6 +2,8 @@ class CVBuilder {
     constructor() {
         this.currentSections = new Set(['employment', 'education', 'skills', 'languages']);
         this.itemCounters = {};
+        this.isSaving = false;
+        this.saveScheduled = false;
         this.userData = {
             personalInfo: {},
             employment: [],
@@ -23,6 +25,7 @@ class CVBuilder {
     init() { // посмотреть гайды
         this.attachEventListeners();
         this.applyTemplateFromQuery();
+        this.loadExistingCVById();
         this.loadSavedData();
         this.setupAutoSave();
     }
@@ -59,14 +62,19 @@ class CVBuilder {
         const downloadBtn = document.getElementById('download-btn');
         const previewBtn = document.getElementById('preview-btn');
         const saveBtn = document.getElementById('save-btn');
+        const saveToDashboardBtn = document.getElementById('save-to-dashboard-btn');
         
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (previewBtn) previewBtn.addEventListener('click', () => this.showPreview());
-        if (saveBtn) saveBtn.addEventListener('click', () => {
-            this.saveData();
+        if (saveBtn) saveBtn.addEventListener('click', async () => {
+            await this.saveData({ immediate: true });
             // небольшая визуальная обратная связь
             saveBtn.classList.add('can-hover:active:bg-brand-100');
             setTimeout(() => saveBtn.classList.remove('can-hover:active:bg-brand-100'), 200);
+        });
+        if (saveToDashboardBtn) saveToDashboardBtn.addEventListener('click', async () => {
+            await this.saveData({ immediate: true });
+            window.location.href = '/pages/dashboard';
         });
 
         // Выбор шаблона
@@ -128,6 +136,35 @@ class CVBuilder {
                 btn.addEventListener('click', (e) => this.toggleSection(e));
             }
         });
+    }
+
+    async loadExistingCVById() {
+        try {
+            const url = new URL(window.location.href);
+            const id = url.searchParams.get('id');
+            if (!id) return;
+            const res = await fetch(`/api/cv/${id}`);
+            const data = await res.json();
+            if (res.ok && data?.success && data.cv) {
+                const cv = data.cv;
+                this.userData = {
+                    _id: cv._id,
+                    title: cv.title || '',
+                    personalInfo: cv.personalInfo || {},
+                    employment: Array.isArray(cv.employment) ? cv.employment : [],
+                    education: Array.isArray(cv.education) ? cv.education : [],
+                    skills: Array.isArray(cv.skills) ? cv.skills : [],
+                    languages: Array.isArray(cv.languages) ? cv.languages : [],
+                    additionalSections: cv.additionalSections || {},
+                    template: cv.template || 'modern',
+                    settings: cv.settings || { fontSize:'medium', colorScheme:'blue', includePhoto:true }
+                };
+                localStorage.setItem('cvBuilderData', JSON.stringify(this.userData));
+                this.populateForm();
+            }
+        } catch (err) {
+            console.error('Ошибка загрузки CV по id:', err);
+        }
     }
 
     toggleSection(e) {
@@ -685,22 +722,56 @@ class CVBuilder {
         return formData;
     }
 
-    saveData() {
+    async saveData({ immediate = false } = {}) {
+        // Собираем данные и сохраняем локально
         this.userData = this.collectFormData();
         this.userData.title = this.getDocumentTitle();
-        
-        // Сохранение в localStorage
+        if (this.userData._id == null && typeof this._id === 'string') {
+            this.userData._id = this._id;
+        }
         localStorage.setItem('cvBuilderData', JSON.stringify(this.userData));
-        
-        // Отправка на сервер
-        fetch('/api/cv/save', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(this.userData)
-        }).catch(error => {
+
+        // Если сохранение уже идёт — помечаем, что нужно выполнить ещё одно после текущего
+        if (this.isSaving) {
+            this.saveScheduled = true;
+            return;
+        }
+
+        this.isSaving = true;
+        try {
+            const res = await fetch('/api/cv/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.userData)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.cv?._id) {
+                this._id = data.cv._id;
+                this.userData._id = data.cv._id;
+                localStorage.setItem('cvBuilderData', JSON.stringify(this.userData));
+            }
+        } catch (error) {
             console.error('Ошибка сохранения на сервере:', error);
+        } finally {
+            this.isSaving = false;
+        }
+
+        // Если за время сохранения накопился ещё один запрос — выполняем его один раз (коалессим бурст)
+        if (this.saveScheduled && !immediate) {
+            this.saveScheduled = false;
+            // Запускаем ещё одно сохранение, но не рекурсивно без конца
+            return this.saveData();
+        }
+    }
+
+    restoreSectionItems(section, items, fillCb) {
+        if (!Array.isArray(items) || items.length === 0) return;
+        const container = document.getElementById(`${section}-items`);
+        items.forEach(() => this.addSectionItem(section));
+        const added = container.querySelectorAll('[data-item-id]');
+        added.forEach((el, idx) => {
+            const itemId = el.getAttribute('data-item-id');
+            fillCb(itemId, items[idx] || {});
         });
     }
 
@@ -743,8 +814,67 @@ class CVBuilder {
             }
         }
 
-        // Заполнение разделов
-        // TODO: Добавить восстановление элементов разделов
+        // Заполнение разделов из сохранённых данных
+        this.restoreSectionItems('employment', this.userData.employment, (itemId, item) => {
+            const root = document.querySelector(`[data-item-id="${itemId}"]`);
+            if (!root) return;
+            const mapping = {
+                position: `${itemId}_position`,
+                company: `${itemId}_company`,
+                start_date: `${itemId}_start_date`,
+                end_date: `${itemId}_end_date`,
+                description: `${itemId}_description`,
+                startDate: `${itemId}_start_date`,
+                endDate: `${itemId}_end_date`,
+            };
+            Object.entries(mapping).forEach(([srcKey, name]) => {
+                const el = root.querySelector(`[name="${name}"]`);
+                if (el && item[srcKey]) el.value = item[srcKey];
+            });
+            const current = root.querySelector(`[name="${itemId}_current"]`);
+            if (current && typeof item.current === 'boolean') {
+                current.checked = item.current;
+                current.dispatchEvent(new Event('change'));
+            }
+        });
+
+        this.restoreSectionItems('education', this.userData.education, (itemId, item) => {
+            const root = document.querySelector(`[data-item-id="${itemId}"]`);
+            if (!root) return;
+            const mapping = {
+                school: `${itemId}_school`,
+                degree: `${itemId}_degree`,
+                level: `${itemId}_level`,
+                start_year: `${itemId}_start_year`,
+                end_year: `${itemId}_end_year`,
+                startYear: `${itemId}_start_year`,
+                endYear: `${itemId}_end_year`,
+            };
+            Object.entries(mapping).forEach(([srcKey, name]) => {
+                const el = root.querySelector(`[name="${name}"]`);
+                if (el && item[srcKey]) el.value = item[srcKey];
+            });
+        });
+
+        this.restoreSectionItems('skills', this.userData.skills, (itemId, item) => {
+            const root = document.querySelector(`[data-item-id="${itemId}"]`);
+            if (!root) return;
+            const mapping = { skill: `${itemId}_skill`, level: `${itemId}_level` };
+            Object.entries(mapping).forEach(([srcKey, name]) => {
+                const el = root.querySelector(`[name="${name}"]`);
+                if (el && item[srcKey]) el.value = item[srcKey];
+            });
+        });
+
+        this.restoreSectionItems('languages', this.userData.languages, (itemId, item) => {
+            const root = document.querySelector(`[data-item-id="${itemId}"]`);
+            if (!root) return;
+            const mapping = { language: `${itemId}_language`, level: `${itemId}_level` };
+            Object.entries(mapping).forEach(([srcKey, name]) => {
+                const el = root.querySelector(`[name="${name}"]`);
+                if (el && item[srcKey]) el.value = item[srcKey];
+            });
+        });
 
         // Отметить выбранный шаблон
         if (this.userData.template) {

@@ -5,39 +5,25 @@ document.addEventListener('DOMContentLoaded', function() {
   // Проверка авторизации пользователя
   checkUserAuth();
   
-  // Mobile menu toggle (for future implementation)
+  // Mobile menu toggle
   const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
   const navMenu = document.querySelector('.nav-menu');
-  
-  if (mobileMenuBtn) {
+  if (mobileMenuBtn && navMenu) {
     mobileMenuBtn.addEventListener('click', function() {
-      console.log('Mobile menu clicked - implement toggle functionality');
-      // Future: Add mobile menu toggle functionality
+      const isOpen = navMenu.classList.toggle('open');
+      mobileMenuBtn.setAttribute('aria-expanded', String(isOpen));
+    });
+    // Close menu on outside click
+    document.addEventListener('click', (e) => {
+      if (navMenu.classList.contains('open')) {
+        const withinNav = e.target.closest('.nav-container');
+        if (!withinNav) navMenu.classList.remove('open');
+      }
     });
   }
   
   // Dropdown menu hover effects
-  const dropdowns = document.querySelectorAll('.nav-dropdown');
-  
-  dropdowns.forEach(dropdown => {
-    const menu = dropdown.querySelector('.nav-dropdown-menu');
-    
-    dropdown.addEventListener('mouseenter', function() {
-      if (menu) {
-        menu.style.opacity = '1';
-        menu.style.visibility = 'visible';
-        menu.style.transform = 'translateY(0)';
-      }
-    });
-    
-    dropdown.addEventListener('mouseleave', function() {
-      if (menu) {
-        menu.style.opacity = '0';
-        menu.style.visibility = 'hidden';
-        menu.style.transform = 'translateY(-10px)';
-      }
-    });
-  });
+  setupDropdowns();
   
   // Copy link functionality for share button
   const copyBtn = document.querySelector('.share-btn.copy');
@@ -125,6 +111,9 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   });
+
+  // Active link highlighting
+  highlightActiveLink();
   
 });
 
@@ -175,7 +164,7 @@ function setupDropdowns() {
   
   dropdowns.forEach(dropdown => {
     const menu = dropdown.querySelector('.nav-dropdown-menu');
-    
+    const btn = dropdown.querySelector('.nav-dropdown-btn');
     dropdown.addEventListener('mouseenter', function() {
       if (menu) {
         menu.style.opacity = '1';
@@ -189,6 +178,25 @@ function setupDropdowns() {
         menu.style.opacity = '0';
         menu.style.visibility = 'hidden';
         menu.style.transform = 'translateY(-10px)';
+      }
+    });
+
+    // Toggle by click (useful on mobile)
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+      });
+    }
+  });
+
+  // Close any open dropdown on outside click
+  document.addEventListener('click', (e) => {
+    const anyOpen = document.querySelectorAll('.nav-dropdown.open');
+    anyOpen.forEach(d => {
+      if (!e.target.closest('.nav-dropdown')) {
+        d.classList.remove('open');
       }
     });
   });
@@ -207,6 +215,20 @@ async function logout() {
     console.error('Ошибка выхода:', error);
     window.location.reload();
   }
+}
+
+// Подсветка активной ссылки навигации
+function highlightActiveLink() {
+  const currentPath = window.location.pathname.replace(/\/$/, '');
+  const links = document.querySelectorAll('.nav-link, .dropdown-item a');
+  links.forEach(link => {
+    try {
+      const linkPath = new URL(link.href, window.location.origin).pathname.replace(/\/$/, '');
+      if (linkPath === currentPath) {
+        link.classList.add('active');
+      }
+    } catch (_) {}
+  });
 }
 
 // Utility function to handle image loading errors
