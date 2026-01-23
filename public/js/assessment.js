@@ -145,6 +145,12 @@
       row.textContent = `${tag} ${item.id}: ${item.reasoning||''}`;
       breakdownEl.appendChild(row);
     });
+
+    // Автопереход к блоку с диаграммой результата
+    try {
+      location.hash = '#resultWrap';
+      resultWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (_) {}
   }
 
   genForm.addEventListener('submit', async (e) => {

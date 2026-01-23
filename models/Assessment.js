@@ -1,20 +1,24 @@
 const mongoose = require('mongoose');
 
+const BreakdownSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  type: { type: String, required: true },
+  correct: { type: Boolean, default: null },
+  score: { type: Number, default: null },
+  reasoning: { type: String, default: '' }
+}, { _id: false });
+
+const AnswerSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  answer: { type: mongoose.Schema.Types.Mixed, required: true }, // индекс для mcq или текст для open
+  score: { type: Number, default: null },
+  feedback: { type: String, default: '' }
+}, { _id: false });
+
 const SubmissionSchema = new mongoose.Schema({
-  answers: [{
-    id: { type: String, required: true },
-    answer: { type: mongoose.Schema.Types.Mixed, required: true }, // индекс для mcq или текст для open
-    score: { type: Number, default: null },
-    feedback: { type: String, default: '' }
-  }],
+  answers: [AnswerSchema],
   totalScore: { type: Number, required: true },
-  breakdown: [{
-    id: String,
-    type: String,
-    correct: Boolean,
-    score: Number,
-    reasoning: String
-  }],
+  breakdown: [BreakdownSchema],
   evaluatedAt: { type: Date, default: Date.now }
 }, { _id: false });
 
