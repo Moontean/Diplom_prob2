@@ -14,6 +14,7 @@ const User = require('./models/User');
 const CV = require('./models/CV');
 const Assessment = require('./models/Assessment');
 const { generateAssessment, evaluateOpenAnswer } = require('./services/llm');
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = require('docx');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -341,6 +342,53 @@ function requireAuth(req, res, next) {
   }
 }
 
+// Получение последнего результата теста пользователя (без процентов)
+async function getLatestAssessmentResult(userId) {
+  try {
+    if (isDBConnected) {
+      const records = await Assessment.find({ userId }).sort({ createdAt: -1 }).lean();
+      let latest = null;
+      for (const rec of records) {
+        if (!rec.submissions?.length) continue;
+        const lastSub = rec.submissions[rec.submissions.length - 1];
+        if (!lastSub) continue;
+        if (!latest || new Date(lastSub.evaluatedAt || rec.createdAt) > new Date(latest.evaluatedAt || latest.createdAt)) {
+          latest = {
+            profession: rec.profession,
+            difficulty: rec.difficulty,
+            totalQuestions: rec.questions?.length || rec.numQuestions || 0,
+            score: lastSub.totalScore,
+            evaluatedAt: lastSub.evaluatedAt || rec.createdAt
+          };
+        }
+      }
+      return latest;
+    }
+
+    // Fallback: in-memory
+    const list = assessments.get(userId) || [];
+    let latest = null;
+    for (const rec of list) {
+      if (!rec.submissions?.length) continue;
+      const lastSub = rec.submissions[rec.submissions.length - 1];
+      if (!lastSub) continue;
+      if (!latest || new Date(lastSub.evaluatedAt || rec.createdAt) > new Date(latest.evaluatedAt || latest.createdAt)) {
+        latest = {
+          profession: rec.profession,
+          difficulty: rec.difficulty,
+          totalQuestions: rec.questions?.length || rec.numQuestions || 0,
+          score: lastSub.totalScore,
+          evaluatedAt: lastSub.evaluatedAt || rec.createdAt
+        };
+      }
+    }
+    return latest;
+  } catch (err) {
+    console.error('Ошибка получения теста для письма:', err);
+    return null;
+  }
+}
+
 // ===== API МАРШРУТЫ ДЛЯ CV =====
 
 // Получение списка CV пользователя
@@ -590,8 +638,10 @@ app.post('/api/cv/download', requireAuth, async (req, res) => {
         const photoSize = 144; // увеличили картинку в PDF в 2 раза
         const photoX = doc.page.width - 50 - photoSize;
         const photoY = 50; // Сдвиг по Y
-        doc.image(buf, photoX, photoY, { width: photoSize, height: photoSize, fit: [photoSize, photoSize] })
-           .roundRect(photoX, photoY, photoSize, photoSize, photoSize / 2).strokeColor('#e5e7eb').stroke();
+
+        // Без рамок/обрезки: показываем как есть, просто вписываем в квадрат с сохранением пропорций
+        doc.image(buf, photoX, photoY, { fit: [photoSize, photoSize], align: 'center', valign: 'center' });
+
         photoBox = { x: photoX, y: photoY, size: photoSize };
       } catch (_) {}
     }
@@ -970,5 +1020,232 @@ app.get('/api/assessment/latest', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Ошибка получения последнего теста:', error);
     res.status(500).json({ success: false, message: 'Ошибка сервера' });
+  }
+});
+
+// Экспорт CV в Word (DOCX)
+app.post('/api/cv/download-docx', requireAuth, async (req, res) => {
+  try {
+    const cv = req.body || {};
+    const children = [];
+
+    const dataUrlToBuffer = (dataUrl) => {
+      if (!dataUrl || typeof dataUrl !== 'string') return null;
+      const match = dataUrl.match(/^data:(image\/[\w.+-]+);base64,(.+)$/);
+      if (!match) return null;
+      try {
+        return Buffer.from(match[2], 'base64');
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const addHeading = (text, level = HeadingLevel.HEADING_2) => {
+      if (!text) return;
+      children.push(new Paragraph({ text, heading: level, spacing: { after: 150 } }));
+    };
+
+    const addParagraph = (text, opts = {}) => {
+      if (!text) return;
+      children.push(new Paragraph({ children: [new TextRun({ text, ...opts })], spacing: { after: 120 } }));
+    };
+
+    const addBullet = (text) => {
+      if (!text) return;
+      children.push(new Paragraph({ text, bullet: { level: 0 }, spacing: { after: 60 } }));
+    };
+
+    const p = cv.personalInfo || {};
+    const fullName = [p['given-name'] || p.givenName, p['family-name'] || p.familyName].filter(Boolean).join(' ');
+    const title = cv.title || 'Моё резюме';
+    addHeading(title, HeadingLevel.HEADING_1);
+    const headline = p['job-position'] || p.jobPosition || '';
+    if (headline) addParagraph(headline, { bold: true });
+
+    // Фото
+    if (cv.settings?.includePhoto !== false && p.photo) {
+      const photoBuffer = dataUrlToBuffer(p.photo);
+      if (photoBuffer) {
+        children.push(new Paragraph({
+          children: [new ImageRun({ data: photoBuffer, transformation: { width: 120, height: 120 } })],
+          spacing: { after: 150 }
+        }));
+      }
+    }
+
+    const contacts = [
+      p.email ? `Email: ${p.email}` : null,
+      p.phone ? `Тел: ${p.phone}` : null,
+      p.city ? `Город: ${p.city}` : null,
+      p.website ? `Сайт: ${p.website}` : null,
+      p.linkedin ? `LinkedIn: ${p.linkedin}` : null
+    ].filter(Boolean).join('  •  ');
+    if (contacts) addParagraph(contacts);
+
+    // Персональные данные
+    const personalLines = [];
+    if (fullName) personalLines.push(`Имя: ${fullName}`);
+    if (p.address) personalLines.push(`Адрес: ${p.address}`);
+    if (p['postal-code'] || p.postalCode) personalLines.push(`Индекс: ${p['postal-code'] || p.postalCode}`);
+    if (personalLines.length) {
+      addHeading('Персональные данные');
+      personalLines.forEach(addParagraph);
+    }
+
+    // Опыт
+    const employment = Array.isArray(cv.employment) ? cv.employment : [];
+    if (employment.length) {
+      addHeading('Опыт работы');
+      employment.forEach(item => {
+        const position = [item.position, item.company].filter(Boolean).join(' · ');
+        const period = [item.start_date || item.startDate, item.current ? 'по наст. время' : (item.end_date || item.endDate)].filter(Boolean).join(' — ');
+        if (position) addParagraph(position, { bold: true });
+        if (period) addParagraph(period, { italics: true });
+        if (item.description) addParagraph(item.description);
+        children.push(new Paragraph({})); // пустая строка
+      });
+    }
+
+    // Образование
+    const education = Array.isArray(cv.education) ? cv.education : [];
+    if (education.length) {
+      addHeading('Образование');
+      education.forEach(item => {
+        if (item.school) addParagraph(item.school, { bold: true });
+        const degree = [item.degree, item.level].filter(Boolean).join(' · ');
+        if (degree) addParagraph(degree);
+        const years = [item.start_year || item.startYear, item.end_year || item.endYear].filter(Boolean).join(' — ');
+        if (years) addParagraph(years, { italics: true });
+        children.push(new Paragraph({}));
+      });
+    }
+
+    // Навыки
+    const skills = Array.isArray(cv.skills) ? cv.skills : [];
+    if (skills.length) {
+      addHeading('Навыки');
+      skills.forEach(s => addBullet(`${s.skill || ''}${s.level ? ' · ' + s.level : ''}`.trim()));
+    }
+
+    // Языки
+    const languages = Array.isArray(cv.languages) ? cv.languages : [];
+    if (languages.length) {
+      addHeading('Языки');
+      languages.forEach(l => addBullet(`${l.language || ''}${l.level ? ' · ' + l.level : ''}`.trim()));
+    }
+
+    // Дополнительные разделы
+    const add = cv.additionalSections || {};
+    const titleMap = {
+      profile: 'Профиль', projects: 'Проекты', certificates: 'Сертификаты', courses: 'Курсы', internships: 'Стажировки',
+      activities: 'Дополнительные виды деятельности', references: 'Рекомендации', qualities: 'Качества', achievements: 'Достижения',
+      signature: 'Подпись', footer: 'Нижний колонтитул', assessment: 'Результаты теста', custom: 'Собственный раздел'
+    };
+    for (const [key, content] of Object.entries(add)) {
+      if (!content) continue;
+      if (key === 'custom' && Array.isArray(content)) {
+        content.forEach(entry => {
+          if (!entry || (!entry.title && !entry.content)) return;
+          addHeading(entry.title || 'Собственный раздел');
+          addParagraph(String(entry.content || ''));
+        });
+        continue;
+      }
+      addHeading(titleMap[key] || key);
+      addParagraph(String(content));
+    }
+
+    const doc = new Document({ sections: [{ children }] });
+    const filename = `${(cv.title || 'resume').replace(/[^\w\-]+/g, '_')}.docx`;
+    const buffer = await Packer.toBuffer(doc);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  } catch (error) {
+    console.error('Ошибка экспорта DOCX:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Ошибка сервера при экспорте DOCX' });
+    }
+  }
+});
+
+// Генерация сопроводительного письма на основе данных CV и последнего теста
+app.post('/api/cv/cover-letter', requireAuth, async (req, res) => {
+  try {
+    const cv = req.body || {};
+    const p = cv.personalInfo || {};
+    const employment = Array.isArray(cv.employment) ? cv.employment : [];
+    const skills = Array.isArray(cv.skills) ? cv.skills : [];
+    const education = Array.isArray(cv.education) ? cv.education : [];
+    const add = cv.additionalSections || {};
+
+    const fullName = [p['given-name'] || p.givenName, p['family-name'] || p.familyName].filter(Boolean).join(' ');
+    const jobTitle = p['job-position'] || p.jobPosition || 'специалист';
+    const city = p.city || '';
+    const contacts = [p.email, p.phone].filter(Boolean).join(' | ');
+
+    // Последний тест (упоминаем без процентов)
+    const assessment = await getLatestAssessmentResult(req.session.userId);
+
+    const firstJob = employment[0] || {};
+    const expLineParts = [];
+    if (firstJob.position) expLineParts.push(firstJob.position);
+    if (firstJob.company) expLineParts.push(firstJob.company);
+    const expLine = expLineParts.join(' — ');
+
+    const skillLine = skills
+      .map(s => s.skill || '')
+      .filter(Boolean)
+      .slice(0, 8)
+      .join(', ');
+
+    const educationLine = education
+      .map(e => [e.degree, e.level, e.school].filter(Boolean).join(', '))
+      .filter(Boolean)[0] || '';
+
+    const profileText = add.profile ? String(add.profile).trim() : '';
+
+    const paragraphs = [];
+    paragraphs.push('Здравствуйте!');
+
+    const intro = fullName
+      ? `Меня зовут ${fullName}. Рассматриваю роль ${jobTitle}${city ? ' в ' + city : ''}.`
+      : `Рассматриваю роль ${jobTitle}${city ? ' в ' + city : ''}.`;
+    paragraphs.push(intro);
+
+    if (expLine) {
+      paragraphs.push(`Ключевой опыт: ${expLine}.`);
+    }
+
+    if (skillLine) {
+      paragraphs.push(`Сильные стороны: ${skillLine}.`);
+    }
+
+    if (educationLine) {
+      paragraphs.push(`Образование: ${educationLine}.`);
+    }
+
+    if (profileText) {
+      paragraphs.push(profileText);
+    }
+
+    if (assessment && assessment.score >= 0.65) {
+      const assessBits = [];
+      if (assessment.profession) assessBits.push(`по направлению ${assessment.profession}`);
+      if (assessment.difficulty) assessBits.push(`уровень ${assessment.difficulty}`);
+      const assessStr = assessBits.join(', ');
+      paragraphs.push(`Недавно прошел(а) внутреннюю оценку ${assessStr || ''} и успешно подтвердил(а) актуальные знания.`.trim());
+    }
+
+    paragraphs.push('Буду рад(а) обсудить, как могу быть полезен(на) команде.');
+    if (contacts) {
+      paragraphs.push(`Связаться со мной: ${contacts}.`);
+    }
+
+    const letter = paragraphs.join('\n\n');
+    res.json({ success: true, letter });
+  } catch (error) {
+    console.error('Ошибка генерации сопроводительного письма:', error);
+    res.status(500).json({ success: false, message: 'Не удалось сгенерировать сопроводительное письмо' });
   }
 });

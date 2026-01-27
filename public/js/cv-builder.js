@@ -18,6 +18,8 @@ class CVBuilder {
                 includePhoto: true
             }
         };
+        this.coverLetterUI = null;
+        this.previewTimer = null;
         
         this.init();
     }
@@ -28,6 +30,7 @@ class CVBuilder {
         this.loadExistingCVById();
         this.loadSavedData();
         this.setupAutoSave();
+        this.setupCoverLetterUI();
     }
 
     attachEventListeners() {
@@ -49,6 +52,19 @@ class CVBuilder {
             btn.addEventListener('click', (e) => this.addNewSection(e.currentTarget.dataset.section));
         });
 
+        // Живой предпросмотр: отслеживаем изменения формы и отправляем обновление в превью
+        const formRoot = document.getElementById('cv-form');
+        if (formRoot) {
+            formRoot.addEventListener('input', () => this.schedulePreviewUpdate());
+            formRoot.addEventListener('change', () => this.schedulePreviewUpdate());
+        }
+
+        // Отправить данные, когда iframe превью загрузится
+        const previewFrame = document.getElementById('live-preview-frame');
+        if (previewFrame) {
+            previewFrame.addEventListener('load', () => this.sendPreviewMessage(this.userData));
+        }
+
         // Загрузка фото
         const photoButton = document.getElementById('photo-upload');
         const photoInput = document.getElementById('photo-input');
@@ -60,6 +76,8 @@ class CVBuilder {
 
         // Кнопки в панели инструментов
         const downloadBtn = document.getElementById('download-btn');
+        const downloadDocxBtn = document.getElementById('download-docx-btn');
+        const coverLetterBtn = document.getElementById('generate-cover-letter-btn');
         const previewBtn = document.getElementById('preview-btn');
         const saveBtn = document.getElementById('save-btn');
         const saveToDashboardBtn = document.getElementById('save-to-dashboard-btn');
@@ -71,6 +89,8 @@ class CVBuilder {
         const addTestResultsBtn = document.getElementById('add-test-results-btn');
         
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
+        if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', () => this.downloadDocx());
+        if (coverLetterBtn) coverLetterBtn.addEventListener('click', () => this.generateCoverLetter());
         if (previewBtn) previewBtn.addEventListener('click', () => this.showPreview());
         if (saveBtn) saveBtn.addEventListener('click', async () => {
             await this.saveData({ immediate: true });
@@ -113,16 +133,42 @@ class CVBuilder {
             addTestResultsBtn.addEventListener('click', async () => {
                 optionsMenu?.classList.add('hidden');
                 try {
+                    let payload = null;
+                    // Сначала пробуем с сервера
                     const res = await fetch('/api/assessment/latest');
                     const data = await res.json();
-                    if (!res.ok || !data.success) {
-                        const msg = data?.message || 'Нет завершённых тестов';
-                        alert(msg);
+                    if (res.ok && data?.success) {
+                        payload = data.result;
+                    }
+
+                    // Фолбэк на локально сохранённый результат (кнопка "Сохранить результат" в тесте)
+                    if (!payload) {
+                        try {
+                            const saved = JSON.parse(localStorage.getItem('savedAssessmentResult') || 'null');
+                            if (saved && typeof saved.score === 'number') {
+                                payload = {
+                                    profession: saved.profession,
+                                    difficulty: saved.difficulty,
+                                    totalQuestions: saved.totalQuestions,
+                                    score: saved.score,
+                                    submittedAt: saved.submittedAt,
+                                    breakdown: saved.breakdown
+                                };
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (!payload || typeof payload.score !== 'number') {
+                        alert(data?.message || 'Нет сохранённых результатов теста. Пройдите тест и сохраните результат (>65%).');
                         return;
                     }
 
-                    const { profession, difficulty, totalQuestions, score, submittedAt } = data.result || {};
-                    const percent = typeof score === 'number' ? Math.round(score * 100) : null;
+                    const { profession, difficulty, totalQuestions, score, submittedAt } = payload;
+                    const percent = Math.round(score * 100);
+                    if (percent < 65) {
+                        alert('Добавление к CV доступно при результате от 65%');
+                        return;
+                    }
                     const summary = [
                         profession ? `Профессия: ${profession}` : null,
                         difficulty ? `Уровень: ${difficulty}` : null,
@@ -143,6 +189,7 @@ class CVBuilder {
                     }
 
                     await this.saveData({ immediate: true });
+                    this.pushLivePreview();
                     alert('Результаты теста добавлены в резюме.');
                 } catch (error) {
                     console.error('Ошибка при добавлении результатов теста:', error);
@@ -212,6 +259,72 @@ class CVBuilder {
         });
     }
 
+    setupCoverLetterUI() {
+        const modal = document.getElementById('cover-letter-modal');
+        if (!modal) return;
+        this.coverLetterUI = {
+            modal,
+            text: document.getElementById('cover-letter-text'),
+            status: document.getElementById('cover-letter-status'),
+            close: document.getElementById('cover-letter-close'),
+            close2: document.getElementById('cover-letter-close-2'),
+            copy: document.getElementById('cover-letter-copy')
+        };
+        const hide = () => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+        this.coverLetterUI.close?.addEventListener('click', hide);
+        this.coverLetterUI.close2?.addEventListener('click', hide);
+        this.coverLetterUI.copy?.addEventListener('click', async () => {
+            const textVal = this.coverLetterUI.text?.value || '';
+            try {
+                await navigator.clipboard.writeText(textVal);
+                this.coverLetterUI.status.textContent = 'Скопировано в буфер обмена';
+            } catch (_) {
+                this.coverLetterUI.status.textContent = 'Не удалось скопировать, выделите текст вручную';
+            }
+        });
+    }
+
+    openCoverLetterModal({ text = '', status = '' }) {
+        if (!this.coverLetterUI) return;
+        this.coverLetterUI.text.value = text;
+        this.coverLetterUI.status.textContent = status;
+        this.coverLetterUI.modal.classList.remove('hidden');
+        this.coverLetterUI.modal.classList.add('flex');
+    }
+
+    async generateCoverLetter() {
+        if (!this.coverLetterUI) {
+            alert('Модальное окно письма не инициализировалось');
+            return;
+        }
+        this.saveData();
+        this.openCoverLetterModal({ text: '', status: 'Генерируем письмо из ваших данных...' });
+        try {
+            const response = await fetch('/api/cv/cover-letter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.userData)
+            });
+            const data = await response.json();
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Не удалось создать письмо');
+            }
+            this.openCoverLetterModal({
+                text: data.letter || '',
+                status: 'Письмо сгенерировано. Можно скопировать и при необходимости отредактировать.'
+            });
+        } catch (error) {
+            console.error('Ошибка генерации письма:', error);
+            this.openCoverLetterModal({
+                text: '',
+                status: 'Ошибка: ' + (error.message || 'неизвестная ошибка')
+            });
+        }
+    }
+
     async loadExistingCVById() {
         try {
             const url = new URL(window.location.href);
@@ -231,7 +344,12 @@ class CVBuilder {
                     languages: Array.isArray(cv.languages) ? cv.languages : [],
                     additionalSections: cv.additionalSections || {},
                     template: cv.template || 'modern',
-                    settings: cv.settings || { fontSize:'medium', colorScheme:'blue', includePhoto:true }
+                    settings: {
+                        fontSize:'medium',
+                        colorScheme:'blue',
+                        includePhoto:true,
+                        ...(cv.settings || {})
+                    }
                 };
                 localStorage.setItem('cvBuilderData', JSON.stringify(this.userData));
                 this.populateForm();
@@ -698,6 +816,42 @@ class CVBuilder {
         });
     }
 
+    downloadDocx() {
+        this.saveData();
+        fetch('/api/cv/download-docx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.userData)
+        })
+        .then(async (response) => {
+            const ct = response.headers.get('content-type') || '';
+            if (response.ok && ct.includes('officedocument.wordprocessingml.document')) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${this.getDocumentTitle() || 'resume'}.docx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                return;
+            }
+            const data = await response.json().catch(() => ({ success:false }));
+            const msg = data?.message || (response.status === 401 ? 'Требуется авторизация' : 'Ошибка при генерации DOCX');
+            throw new Error(msg);
+        })
+        .catch(error => {
+            console.error('Ошибка DOCX:', error);
+            if (String(error?.message || '').includes('Требуется авторизация')) {
+                alert('Требуется авторизация для скачивания DOCX');
+                window.location.href = '/pages/login';
+                return;
+            }
+            alert(`Не удалось скачать DOCX: ${error.message || 'неизвестная ошибка'}`);
+        });
+    }
+
     showPreview() {
         // Сохранение данных перед предварительным просмотром
         this.saveData();
@@ -740,7 +894,12 @@ class CVBuilder {
             languages: [],
             additionalSections: {},
             template: this.userData.template || 'modern',
-            settings: this.userData.settings || { fontSize: 'medium', colorScheme: 'blue', includePhoto: true }
+            settings: {
+                fontSize: 'medium',
+                colorScheme: 'blue',
+                includePhoto: true,
+                ...(this.userData.settings || {})
+            }
         };
 
         // Сбор персональных данных
@@ -795,6 +954,33 @@ class CVBuilder {
         });
 
         return formData;
+    }
+
+
+    schedulePreviewUpdate() {
+        clearTimeout(this.previewTimer);
+        this.previewTimer = setTimeout(() => this.pushLivePreview(), 200);
+    }
+
+    pushLivePreview() {
+        const data = this.collectFormData();
+        data.title = this.getDocumentTitle();
+        if (this.userData && this.userData._id) {
+            data._id = this.userData._id;
+        }
+        this.userData = data;
+        try {
+            localStorage.setItem('cvBuilderData', JSON.stringify(data));
+        } catch (_) {}
+        this.sendPreviewMessage(data);
+    }
+
+    sendPreviewMessage(data) {
+        const frame = document.getElementById('live-preview-frame');
+        if (frame && frame.contentWindow) {
+            const targetOrigin = window.location.origin || '*';
+            frame.contentWindow.postMessage({ type: 'cv-data', payload: data }, targetOrigin);
+        }
     }
 
     async saveData({ immediate = false } = {}) {
@@ -979,17 +1165,21 @@ class CVBuilder {
                 textarea.value = value;
             }
         });
+
+        this.pushLivePreview();
     }
 
     setupAutoSave() {
         // Автосохранение каждые 30 секунд
         setInterval(() => {
             this.saveData(); // теперь только локально, без отправки на сервер
+            this.sendPreviewMessage(this.userData);
         }, 30000);
 
         // Сохранение при закрытии страницы
         window.addEventListener('beforeunload', () => {
             this.saveData(); // только локально
+            this.sendPreviewMessage(this.userData);
         });
     }
 
@@ -1005,6 +1195,7 @@ class CVBuilder {
             }
         });
         this.saveData(); // только локально; сервер — по кнопке
+        this.pushLivePreview();
     }
 
     clearAllFields() {

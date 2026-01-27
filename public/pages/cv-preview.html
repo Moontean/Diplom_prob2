@@ -135,8 +135,16 @@
       });
     }
 
-    function render() {
-      const data = getData();
+    function render(dataOverride) {
+      if (!window.__cvPreviewListenerAttached) {
+        window.addEventListener('message', (event) => {
+          const payload = event.data;
+          if (!payload || payload.type !== 'cv-data') return;
+          render(payload.payload || {});
+        });
+        window.__cvPreviewListenerAttached = true;
+      }
+      const data = dataOverride || getData();
       const titleEl = document.getElementById('cvTitle');
       const tplEl = document.getElementById('cvTemplate');
       const root = document.getElementById('cvRoot');
@@ -156,7 +164,6 @@
       } else {
         photoWrap.classList.add('hidden');
       }
-
       // Personal info
       const pf = document.getElementById('personalFields');
       pf.innerHTML = '';
@@ -174,7 +181,7 @@
         ['Сайт', p.website],
         ['LinkedIn', p.linkedin]
       ];
-      const hasPersonal = fields.some(([_, v]) => !!v);
+      const hasPersonal = fields.some(([_, v]) => !!v) || !!p.photo;
       document.getElementById('personalInfo').classList.toggle('hidden', !hasPersonal);
       fields.forEach(([label, value]) => {
         if (!value) return;
@@ -255,6 +262,7 @@
         achievements: 'Достижения',
         signature: 'Подпись',
         footer: 'Нижний колонтитул',
+        assessment: 'Результаты теста',
         custom: 'Собственный раздел'
       };
       const entries = Object.entries(add).filter(([_, v]) => !!v);

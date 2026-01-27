@@ -57,6 +57,37 @@
     </style>
 </head>
 <body class="bg-background font-sans">
+
+    <style>
+        /* Панель превью справа (desktop) */
+        @media (min-width: 1024px) {
+            #builder-wrapper { right: 42vw; }
+            #live-preview-panel { display: block; }
+        }
+        @media (max-width: 1023px) {
+            #builder-wrapper { right: 0; }
+            #live-preview-panel { display: none; }
+        }
+        #live-preview-panel {
+            position: fixed;
+            top: 50px;
+            right: 0;
+            width: 42vw;
+            min-width: 360px;
+            height: calc(100vh - 60px);
+            background: #f8fafc;
+            border-left: 1px solid #e5e7eb;
+            box-shadow: -6px 0 18px rgba(0,0,0,0.06);
+            z-index: 10;
+            display: none;
+        }
+        #live-preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #f8fafc;
+        }
+    </style>
     
     <!-- Верхняя панель инструментов -->
     <div class="fixed top-0 start-0 end-0 z-20" id="document-toolbar">
@@ -150,12 +181,34 @@
                     </span>
                     <span class="sr-only">Скачать</span>
                 </button>
+                <button class="hidden sm:inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-white active:bg-gray-100 can-hover:active:bg-gray-100 text-gray-800 border-gray-300 can-hover:hover:bg-gray-50 can-hover:hover:border-brand-400 font-medium py-1 lg:py-2 ps-1 pe-2 lg:ps-2 lg:pe-3 text-base ml-2" 
+                        type="button"
+                        id="download-docx-btn"
+                        style="outline: none;">
+                    <span class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="pointer-events-none flex-shrink-0 box-content h-6 w-6">
+                            <path fill="currentColor" d="M284-240q-14 0-23-9t-9-23v-416q0-14 9-23t23-9h277l152 152v296q0 14-9 23t-23 9H284Zm253-350v-99H284v416h392v-294H537q-14 0-23-9t-9-23Z"/>
+                        </svg>
+                    </span>
+                    <span class="sr-only">Скачать DOCX</span>
+                </button>
+                <button class="hidden md:inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-white active:bg-gray-100 can-hover:active:bg-gray-100 text-gray-800 border-gray-300 can-hover:hover:bg-brand-50 can-hover:hover:border-brand-400 font-medium py-1 lg:py-2 ps-2 pe-3 text-base ml-2"
+                        type="button"
+                        id="generate-cover-letter-btn"
+                        style="outline: none;">
+                    <span class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="pointer-events-none flex-shrink-0 box-content h-6 w-6">
+                            <path fill="currentColor" d="M200-160q-33 0-56.5-23.5T120-240v-480q0-33 23.5-56.5T200-800h360l200 200v360q0 33-23.5 56.5T680-160H200Zm0-80h480v-320L530-720H200v480Zm80-80h320v-80H280v80Zm0-120h320v-80H280v80Z"/>
+                        </svg>
+                    </span>
+                    <span class="sr-only">Генерация сопроводительного письма</span>
+                </button>
             </div>
         </div>
     </div>
 
     <!-- Основной контент -->
-    <div class="bg-white fixed start-0 bottom-0 w-full px-5 pb-10 overflow-y-auto" style="top: 49.6px;">
+    <div id="builder-wrapper" class="bg-white fixed start-0 bottom-0 w-full px-5 pb-10 overflow-y-auto" style="top: 49.6px;">
         <div class="mx-auto max-w-2xl">
             <div class="pt-5">
                 <!-- Быстрые действия -->
@@ -728,6 +781,36 @@
             </div>
         </div>
     </div>
+
+    <!-- Модалка сопроводительного письма -->
+    <div id="cover-letter-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-40">
+        <div class="bg-white rounded-brand shadow-xl max-w-2xl w-full mx-4 p-6 relative">
+            <button id="cover-letter-close" class="absolute top-3 right-3 text-gray-500 hover:text-gray-800" aria-label="Закрыть">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-6 h-6">
+                    <path fill="currentColor" d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>
+                </svg>
+            </button>
+            <h3 class="text-lg font-semibold text-gray-800 mb-3">Сопроводительное письмо</h3>
+            <p id="cover-letter-status" class="text-sm text-gray-500 mb-3">Генерируем письмо из ваших данных...</p>
+            <textarea id="cover-letter-text" class="w-full border border-gray-200 rounded p-3 text-sm text-gray-800 h-64 resize-y focus:border-brand-400 focus:ring-brand-200" readonly></textarea>
+            <div class="flex justify-between items-center mt-4">
+                <button id="cover-letter-copy" class="inline-flex items-center gap-2 px-4 py-2 rounded-brand bg-brand-500 text-white hover:bg-brand-400 focus-visible:ring-4 ring-brand-200" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5"><path fill="currentColor" d="M280-120q-33 0-56.5-23.5T200-200v-520h80v520h320v80H280Zm160-160q-33 0-56.5-23.5T360-360v-440q0-33 23.5-56.5T440-880h320q33 0 56.5 23.5T840-800v440q0 33-23.5 56.5T760-280H440Zm0-80h320v-440H440v440Zm0 0v-440 440Z"/></svg>
+                    Скопировать
+                </button>
+                <button id="cover-letter-close-2" class="text-sm text-gray-600 hover:text-gray-900" type="button">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Живой предпросмотр CV справа -->
+    <aside id="live-preview-panel">
+        <div class="px-4 py-2 text-sm text-gray-600 border-b bg-white flex items-center justify-between">
+            <span>Живой предпросмотр</span>
+            <span class="text-xs text-gray-400">обновляется автоматически</span>
+        </div>
+        <iframe id="live-preview-frame" title="Предпросмотр резюме" src="/pages/cv-preview"></iframe>
+    </aside>
 
         <!-- Быстрый доступ к сохранению внизу страницы -->
         <button

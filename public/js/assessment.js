@@ -12,10 +12,14 @@
 
   const resultWrap = document.getElementById('resultWrap');
   const scoreText = document.getElementById('scoreText');
+  const saveResultBtn = document.getElementById('saveResultBtn');
+  const saveResultStatus = document.getElementById('saveResultStatus');
   const breakdownEl = document.getElementById('breakdown');
 
   let currentAssessmentId = null;
   let currentQuestions = [];
+  let currentMeta = { profession: '', difficulty: '', numQuestions: 0 };
+  let lastResult = null;
 
   function normalizeQuestions(questions){
     const out = [];
@@ -105,6 +109,24 @@
     resultWrap.classList.remove('hidden');
     const pct = Math.round((res.score || 0) * 100);
     scoreText.textContent = `Итоговый результат: ${pct}%`;
+    lastResult = {
+      assessmentId: currentAssessmentId,
+      profession: currentMeta.profession,
+      difficulty: currentMeta.difficulty,
+      totalQuestions: currentQuestions.length,
+      score: res.score || 0,
+      breakdown: res.breakdown || [],
+      submittedAt: Date.now()
+    };
+
+    // Показать кнопку сохранения, если результат >= 65%
+    if (pct >= 65 && saveResultBtn) {
+      saveResultBtn.classList.remove('hidden');
+      saveResultStatus.textContent = '';
+    } else if (saveResultBtn) {
+      saveResultBtn.classList.add('hidden');
+      saveResultStatus.textContent = pct < 65 ? 'Сохранение доступно при результате от 65%.' : '';
+    }
 
     // Диаграмма качества: зелёный (полностью верно), жёлтый (частично), красный (неверно)
     const total = (res.breakdown || []).length || 1;
@@ -158,11 +180,18 @@
     resultWrap.classList.add('hidden');
     submitStatus.textContent = '';
 
+    // Сброс кнопки сохранения
+    if (saveResultBtn) {
+      saveResultBtn.classList.add('hidden');
+      saveResultStatus.textContent = '';
+    }
+
     if (!(await ensureAuth())) return;
 
     const profession = document.getElementById('profession').value.trim();
     const difficulty = document.getElementById('difficulty').value;
     const numQuestions = Number(document.getElementById('numQuestions').value) || 10;
+    currentMeta = { profession, difficulty, numQuestions };
     if (!profession) return;
 
     genBtn.disabled = true;
@@ -224,4 +253,18 @@
 
   // Initial auth check
   ensureAuth();
+
+  // Сохранение результата в localStorage для CV Builder
+  if (saveResultBtn) {
+    saveResultBtn.addEventListener('click', () => {
+      if (!lastResult) return;
+      try {
+        localStorage.setItem('savedAssessmentResult', JSON.stringify(lastResult));
+        saveResultStatus.textContent = 'Результат сохранён. Можно добавить в CV.';
+      } catch (err) {
+        saveResultStatus.textContent = 'Не удалось сохранить результат.';
+        console.error(err);
+      }
+    });
+  }
 })();
