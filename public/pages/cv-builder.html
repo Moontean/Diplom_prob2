@@ -98,7 +98,7 @@
 
             <!-- Панель действий -->
             <div class="ms-auto flex items-start">
-                <div class="flex items-center me-2">
+                <div class="flex items-center me-2 relative">
                     <button class="inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-gray-900 active:bg-gray-700 can-hover:active:bg-gray-700 text-white border-gray-600 can-hover:hover:bg-gray-800 font-medium py-1 lg:py-2 ps-1 pe-1 lg:ps-2 lg:pe-2 text-base" 
                             type="button" 
                             id="options-btn"
@@ -109,6 +109,11 @@
                             </svg>
                         </span>
                     </button>
+                    <div id="options-menu" class="hidden absolute right-0 top-full mt-2 w-64 bg-white text-gray-800 border border-gray-200 rounded shadow-lg z-30">
+                        <button id="save-from-options-btn" class="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Сохранить резюме</button>
+                        <button id="clear-form-btn" class="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Очистить все поля</button>
+                        <button id="add-test-results-btn" class="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm">Добавить результаты теста к CV (скоро)</button>
+                    </div>
                 </div>
                 <!-- Сохранить -->
                 <button class="inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-gray-900 active:bg-gray-700 can-hover:active:bg-gray-700 text-white border-gray-600 can-hover:hover:bg-gray-800 font-medium py-1 lg:py-2 ps-1 pe-2 lg:ps-2 lg:pe-3 text-base me-2" 
@@ -693,6 +698,17 @@
                         </span>
                         <div class="truncate h-6 ms-0.5">Собственный раздел</div>
                     </button>
+                    <button class="add-section-btn inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-transparent active:bg-brand-100 can-hover:active:bg-brand-100 text-gray-700 border-gray-400 can-hover:hover:bg-brand-50 can-hover:hover:border-brand-400 font-medium py-1 ps-1 pe-3 text-base" 
+                            type="button" 
+                            data-section="assessment"
+                            style="outline: none;">
+                        <span class="relative">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="pointer-events-none flex-shrink-0 box-content h-6 w-6">
+                                <path fill="currentColor" d="M480-750.001q-113.616 0-193.808 80.192T206-476.001q0 113.615 80.192 193.807T480-201.999q113.615 0 193.807-80.192T754-476.001q0-113.615-80.192-193.807T480-750.001Zm-.001 430.384q-90.769 0-153.576-62.807Q263.616-445.231 263.616-536t62.807-153.577q62.807-62.807 153.576-62.807t153.577 62.807Q733.384-626.769 733.384-536t-62.807 153.576q-62.808 62.807-153.578 62.807Zm-33.691-93.461 197.999-197.999-51.845-51.846-146.154 146.154-73.307-73.307-51.846 51.846 125.153 125.152Z"/>
+                            </svg>
+                        </span>
+                        <div class="truncate h-6 ms-0.5">Результаты теста</div>
+                    </button>
                 </div>
 
                 <!-- Кнопка предварительного просмотра -->
@@ -713,6 +729,17 @@
         </div>
     </div>
 
-    <script src="/js/cv-builder.js"></script>
+        <!-- Быстрый доступ к сохранению внизу страницы -->
+        <button
+            id="save-bottom-btn"
+            class="fixed right-4 bottom-4 z-30 inline-flex items-center gap-2 px-4 py-2 rounded-brand bg-brand-600 text-white shadow-lg hover:bg-brand-500 focus-visible:ring-4 ring-brand-200"
+            type="button"
+            aria-label="Сохранить резюме в кабинет"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5"><path fill="currentColor" d="M240-120q-30 0-51-21t-21-51v-576q0-30 21-51t51-21h456q12 0 23 4.5t19 12.5l126 126q8 8 12.5 19t4.5 23v463q0 30-21 51t-51 21H240Zm0-72h480v-426L600-792H240v600Zm240-54q26 0 44.5-18.5T543-330q0-26-18.5-44.5T480-393q-26 0-44.5 18.5T417-330q0 26 18.5 44.5T480-246Z"/></svg>
+            <span>Сохранить резюме</span>
+        </button>
+
+        <script src="/js/cv-builder.js"></script>
 </body>
 </html>

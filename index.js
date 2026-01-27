@@ -582,19 +582,37 @@ app.post('/api/cv/download', requireAuth, async (req, res) => {
 
     // Фото (если base64)
     const photo = p.photo;
+    let photoBox = null;
     if (photo && typeof photo === 'string' && photo.startsWith('data:image/')) {
       try {
         const base64 = photo.split(',')[1];
         const buf = Buffer.from(base64, 'base64');
-        doc.image(buf, doc.page.width - 50 - 72, 50, { width: 72, height: 72, fit: [72,72] })
-           .roundRect(doc.page.width - 50 - 72, 50, 72, 72, 36).strokeColor('#e5e7eb').stroke();
+        const photoSize = 144; // увеличили картинку в PDF в 2 раза
+        const photoX = doc.page.width - 50 - photoSize;
+        const photoY = 50; // Сдвиг по Y
+        doc.image(buf, photoX, photoY, { width: photoSize, height: photoSize, fit: [photoSize, photoSize] })
+           .roundRect(photoX, photoY, photoSize, photoSize, photoSize / 2).strokeColor('#e5e7eb').stroke();
+        photoBox = { x: photoX, y: photoY, size: photoSize };
       } catch (_) {}
     }
 
+    // Сдвигаем курсор ниже фото, чтобы линии/секции не пересекали его по вертикали
+    if (photoBox) {
+      const targetY = photoBox.y + photoBox.size + 12;
+      if (doc.y < targetY) {
+        doc.y = targetY;
+      }
+    }
+
+    let sectionCount = 0;
     const addSection = (title) => {
+      sectionCount += 1;
       if (fontPaths) doc.font(fontPaths.bold);
       doc.moveDown().fillColor(accent).fontSize(14).text(title);
-      doc.moveTo(50, doc.y + 2).lineTo(doc.page.width - 50, doc.y + 2).strokeColor('#e5e7eb').stroke();
+      if (sectionCount > 1) {
+        const lineEnd = photoBox ? Math.max(120, photoBox.x - 12) : doc.page.width - 50;
+        doc.moveTo(50, doc.y + 2).lineTo(lineEnd, doc.y + 2).strokeColor('#e5e7eb').stroke();
+      }
       doc.moveDown(0.3);
       if (fontPaths) doc.font(fontPaths.regular);
       doc.fillColor('#111827').fontSize(11);
@@ -663,10 +681,18 @@ app.post('/api/cv/download', requireAuth, async (req, res) => {
     const titleMap = {
       profile: 'Профиль', projects: 'Проекты', certificates: 'Сертификаты', courses: 'Курсы', internships: 'Стажировки',
       activities: 'Дополнительные виды деятельности', references: 'Рекомендации', qualities: 'Качества', achievements: 'Достижения',
-      signature: 'Подпись', footer: 'Нижний колонтитул', custom: 'Собственный раздел'
+      signature: 'Подпись', footer: 'Нижний колонтитул', assessment: 'Результаты теста', custom: 'Собственный раздел'
     };
     for (const [key, content] of Object.entries(add)) {
       if (!content) continue;
+      if (key === 'custom' && Array.isArray(content)) {
+        content.forEach(entry => {
+          if (!entry || (!entry.title && !entry.content)) return;
+          addSection(entry.title || 'Собственный раздел');
+          doc.text(String(entry.content || ''));
+        });
+        continue;
+      }
       addSection(titleMap[key] || key);
       doc.text(String(content));
     }
@@ -901,6 +927,48 @@ app.get('/api/assessment', requireAuth, async (req, res) => {
     res.json({ success: true, assessments: list });
   } catch (error) {
     console.error('Ошибка списка тестов:', error);
+    res.status(500).json({ success: false, message: 'Ошибка сервера' });
+  }
+});
+
+// Последний результат теста пользователя (для прикрепления к CV)
+app.get('/api/assessment/latest', requireAuth, async (req, res) => {
+  try {
+    let latest = null;
+
+    if (isDBConnected) {
+      latest = await Assessment.findOne({ userId: req.session.userId, submissions: { $exists: true, $ne: [] } })
+        .sort({ 'submissions.evaluatedAt': -1, createdAt: -1 })
+        .lean();
+    } else {
+      for (const v of assessments.values()) {
+        if (v.userId?.toString() !== req.session.userId?.toString()) continue;
+        if (!v.submissions?.length) continue;
+        if (!latest || new Date(v.submissions[v.submissions.length - 1].evaluatedAt || v.createdAt) > new Date(latest.submissions[latest.submissions.length - 1].evaluatedAt || latest.createdAt)) {
+          latest = v;
+        }
+      }
+    }
+
+    if (!latest || !latest.submissions?.length) {
+      return res.status(404).json({ success: false, message: 'У вас пока нет завершённых тестов.' });
+    }
+
+    const submission = latest.submissions[latest.submissions.length - 1];
+    const totalQuestions = latest.questions?.length || latest.numQuestions || 0;
+    res.json({
+      success: true,
+      result: {
+        profession: latest.profession,
+        difficulty: latest.difficulty,
+        totalQuestions,
+        score: submission.totalScore,
+        submittedAt: submission.evaluatedAt || latest.createdAt,
+        breakdown: submission.breakdown || []
+      }
+    });
+  } catch (error) {
+    console.error('Ошибка получения последнего теста:', error);
     res.status(500).json({ success: false, message: 'Ошибка сервера' });
   }
 });

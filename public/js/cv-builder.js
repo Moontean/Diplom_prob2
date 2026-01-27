@@ -63,6 +63,12 @@ class CVBuilder {
         const previewBtn = document.getElementById('preview-btn');
         const saveBtn = document.getElementById('save-btn');
         const saveToDashboardBtn = document.getElementById('save-to-dashboard-btn');
+        const saveBottomBtn = document.getElementById('save-bottom-btn');
+        const optionsBtn = document.getElementById('options-btn');
+        const optionsMenu = document.getElementById('options-menu');
+        const saveFromOptionsBtn = document.getElementById('save-from-options-btn');
+        const clearFormBtn = document.getElementById('clear-form-btn');
+        const addTestResultsBtn = document.getElementById('add-test-results-btn');
         
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (previewBtn) previewBtn.addEventListener('click', () => this.showPreview());
@@ -76,6 +82,74 @@ class CVBuilder {
             await this.saveData({ immediate: true });
             window.location.href = '/pages/dashboard';
         });
+        if (saveBottomBtn) saveBottomBtn.addEventListener('click', async () => {
+            await this.saveData({ immediate: true });
+            window.location.href = '/pages/dashboard';
+        });
+        if (optionsBtn && optionsMenu) {
+            optionsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                optionsMenu.classList.toggle('hidden');
+            });
+            document.addEventListener('click', (e) => {
+                if (!optionsMenu.classList.contains('hidden') && !optionsMenu.contains(e.target) && e.target !== optionsBtn) {
+                    optionsMenu.classList.add('hidden');
+                }
+            });
+        }
+        if (clearFormBtn) {
+            clearFormBtn.addEventListener('click', () => {
+                this.clearAllFields();
+                optionsMenu?.classList.add('hidden');
+            });
+        }
+        if (saveFromOptionsBtn) {
+            saveFromOptionsBtn.addEventListener('click', async () => {
+                await this.saveData({ immediate: true });
+                optionsMenu?.classList.add('hidden');
+            });
+        }
+        if (addTestResultsBtn) {
+            addTestResultsBtn.addEventListener('click', async () => {
+                optionsMenu?.classList.add('hidden');
+                try {
+                    const res = await fetch('/api/assessment/latest');
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        const msg = data?.message || 'Нет завершённых тестов';
+                        alert(msg);
+                        return;
+                    }
+
+                    const { profession, difficulty, totalQuestions, score, submittedAt } = data.result || {};
+                    const percent = typeof score === 'number' ? Math.round(score * 100) : null;
+                    const summary = [
+                        profession ? `Профессия: ${profession}` : null,
+                        difficulty ? `Уровень: ${difficulty}` : null,
+                        typeof totalQuestions === 'number' ? `Вопросов: ${totalQuestions}` : null,
+                        percent != null ? `Итоговый балл: ${percent}%` : null,
+                        submittedAt ? `Дата: ${new Date(submittedAt).toLocaleDateString('ru-RU')}` : null
+                    ].filter(Boolean).join(' | ');
+
+                    // Добавляем/создаём секцию "Результаты теста"
+                    if (!this.currentSections.has('assessment')) {
+                        this.addNewSection('assessment');
+                    }
+                    const textarea = document.querySelector('#assessment-items textarea');
+                    if (textarea) {
+                        const baseText = summary || 'Результаты AI-теста';
+                        const note = '\n\u2022 Добавьте детали: сильные стороны, темы для улучшения.';
+                        textarea.value = baseText + note;
+                    }
+
+                    await this.saveData({ immediate: true });
+                    alert('Результаты теста добавлены в резюме.');
+                } catch (error) {
+                    console.error('Ошибка при добавлении результатов теста:', error);
+                    alert('Не удалось получить результаты теста. Попробуйте позже.');
+                }
+            });
+        }
 
         // Выбор шаблона
         const templateButtons = document.querySelectorAll('.template-option');
@@ -479,6 +553,7 @@ class CVBuilder {
             achievements: { title: 'Достижения', template: 'textarea' },
             signature: { title: 'Подпись', template: 'textarea' },
             footer: { title: 'Нижний колонтитул', template: 'textarea' },
+            assessment: { title: 'Результаты теста', template: 'textarea' },
             custom: { title: 'Собственный раздел', template: 'textarea' }
         };
 
@@ -709,7 +784,7 @@ class CVBuilder {
         });
 
         // Сбор дополнительных секций
-        ['profile', 'projects', 'certificates', 'courses', 'internships', 'activities', 'references', 'qualities', 'achievements', 'signature', 'footer', 'custom'].forEach(section => {
+        ['profile', 'projects', 'certificates', 'courses', 'internships', 'activities', 'references', 'qualities', 'achievements', 'signature', 'footer', 'assessment', 'custom'].forEach(section => {
             const container = document.getElementById(`${section}-items`);
             if (container) {
                 const textarea = container.querySelector('textarea');
@@ -730,6 +805,9 @@ class CVBuilder {
             this.userData._id = this._id;
         }
         localStorage.setItem('cvBuilderData', JSON.stringify(this.userData));
+
+        // Не отправляем на сервер, пока явно не попросили (immediate)
+        if (!immediate) return;
 
         // Если сохранение уже идёт — помечаем, что нужно выполнить ещё одно после текущего
         if (this.isSaving) {
@@ -887,17 +965,31 @@ class CVBuilder {
                 }
             });
         }
+
+        // Восстановление текстовых дополнительных секций (textarea)
+        const extraSections = ['profile','projects','certificates','courses','internships','activities','references','qualities','achievements','signature','footer','assessment','custom'];
+        extraSections.forEach(section => {
+            const value = this.userData?.additionalSections?.[section];
+            if (!value) return;
+            if (!this.currentSections.has(section)) {
+                this.addNewSection(section);
+            }
+            const textarea = document.querySelector(`#${section}-items textarea`);
+            if (textarea) {
+                textarea.value = value;
+            }
+        });
     }
 
     setupAutoSave() {
         // Автосохранение каждые 30 секунд
         setInterval(() => {
-            this.saveData();
+            this.saveData(); // теперь только локально, без отправки на сервер
         }, 30000);
 
         // Сохранение при закрытии страницы
         window.addEventListener('beforeunload', () => {
-            this.saveData();
+            this.saveData(); // только локально
         });
     }
 
@@ -912,7 +1004,64 @@ class CVBuilder {
                 btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
             }
         });
-        this.saveData();
+        this.saveData(); // только локально; сервер — по кнопке
+    }
+
+    clearAllFields() {
+        // Сброс базовых полей
+        document.querySelectorAll('#cv-form input, #cv-form textarea, #cv-form select').forEach(el => {
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                el.checked = false;
+            } else {
+                el.value = '';
+            }
+        });
+
+        // Сброс фото
+        const photoButton = document.getElementById('photo-upload');
+        if (photoButton) {
+            photoButton.style.backgroundImage = '';
+            photoButton.innerHTML = '<div class="sr-only">Обновить фото</div><span class="relative"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-8 text-gray-400"><path fill="currentColor" d="M440-275.39q68.85 0 116.73-47.88T604.61-440t-47.88-116.73T440-604.61t-116.73 47.88T275.39-440t47.88 116.73T440-275.39"></path></svg></span>';
+        }
+
+        // Удаление динамических элементов разделов
+        ['employment','education','skills','languages'].forEach(section => {
+            const container = document.getElementById(`${section}-items`);
+            if (container) {
+                container.innerHTML = '';
+                container.classList.add('hidden');
+            }
+            this.itemCounters[section] = 0;
+        });
+
+        // Очистка дополнительных секций (textarea)
+        ['profile','projects','certificates','courses','internships','activities','references','qualities','achievements','signature','footer','custom'].forEach(section => {
+            const container = document.getElementById(`${section}-items`);
+            if (container) {
+                const textarea = container.querySelector('textarea');
+                if (textarea) textarea.value = '';
+            }
+        });
+
+        // Удаление дополнительных полей персональной информации
+        document.querySelectorAll('[data-field-type]').forEach(el => el.remove());
+        document.querySelectorAll('.add-field-btn').forEach(btn => btn.style.display = '');
+
+        // Сброс выбранного шаблона на modern
+        this.selectTemplate('modern');
+
+        // Сброс локальных данных
+        this.userData = {
+            personalInfo: {},
+            employment: [],
+            education: [],
+            skills: [],
+            languages: [],
+            additionalSections: {},
+            template: 'modern',
+            settings: { fontSize: 'medium', colorScheme: 'blue', includePhoto: true }
+        };
+        localStorage.removeItem('cvBuilderData');
     }
 }
 
