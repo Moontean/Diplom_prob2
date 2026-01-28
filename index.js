@@ -15,8 +15,14 @@ const CV = require('./models/CV');
 const Assessment = require('./models/Assessment');
 const { generateAssessment, evaluateOpenAnswer } = require('./services/llm');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = require('docx');
+const { cvSchema } = require('./services/cvValidation');
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProd = process.env.NODE_ENV === 'production';
+
+if (isProd) {
+  app.set('trust proxy', 1);
+}
 
 // Подключение к MongoDB
 let isDBConnected = false;
@@ -33,18 +39,28 @@ const assessments = new Map();
 // Настройка middleware (увеличиваем лимит тела запроса для больших CV/фото)
 app.use(bodyParser.urlencoded({ extended: true, limit: '15mb' }));
 app.use(bodyParser.json({ limit: '15mb' }));
+const sessionSecret = process.env.SESSION_SECRET || '';
+if (!sessionSecret) {
+  console.warn('⚠️ SESSION_SECRET не задан. Используется небезопасное значение для dev.');
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'cv-builder-secret-key',
+  secret: sessionSecret || 'dev-secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 часа
+  cookie: {
+    secure: isProd,
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000
+  }
 }));
 
 // Раздача статических файлов из папки public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Раздача загруженных файлов
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Раздача загруженных файлов (только для авторизованных)
+// Перенесено ниже после определения requireAuth
 
 // Логирование всех запросов для отладки
 app.use((req, res, next) => {
@@ -58,6 +74,15 @@ const generateLimiter = rateLimit({
   max: 3,
   standardHeaders: true,
   legacyHeaders: false
+});
+
+// Ограничитель для аутентификации
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Слишком много попыток. Повторите позже.'
 });
 
 // Главная страница
@@ -137,7 +162,7 @@ app.get('/api/db-status', (req, res) => {
 });
 
 // POST маршрут для регистрации
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authLimiter, async (req, res) => {
   const { email, password, confirmPassword, firstName, lastName } = req.body;
   
   // Валидация
@@ -204,7 +229,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // POST маршрут для входа
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   
   if (!email || !password) {
@@ -342,6 +367,19 @@ function requireAuth(req, res, next) {
   }
 }
 
+function validateCv(req, res, next) {
+  const parsed = cvSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+    return res.status(400).json({ success: false, message: 'Неверные данные CV', errors });
+  }
+  req.validatedCv = parsed.data;
+  next();
+}
+
+// Защищённая раздача загруженных файлов
+app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
+
 // Получение последнего результата теста пользователя (без процентов)
 async function getLatestAssessmentResult(userId) {
   try {
@@ -472,10 +510,11 @@ app.get('/api/cv/:id', requireAuth, async (req, res) => {
 });
 
 // Сохранение CV
-app.post('/api/cv/save', requireAuth, async (req, res) => {
+app.post('/api/cv/save', requireAuth, validateCv, async (req, res) => {
   try {
+    const payload = req.validatedCv || {};
     if (isDBConnected) {
-      const { _id, ...cvData } = req.body;
+      const { _id, ...cvData } = payload;
       
       let cv;
       if (_id) {
@@ -563,10 +602,10 @@ app.post('/api/cv/upload-photo', requireAuth, upload.single('photo'), (req, res)
 });
 
 // Экспорт CV в PDF
-app.post('/api/cv/download', requireAuth, async (req, res) => {
+app.post('/api/cv/download', requireAuth, validateCv, async (req, res) => {
   try {
     const PDFDocument = require('pdfkit');
-    const cv = req.body || {};
+    const cv = req.validatedCv || {};
     const fs = require('fs');
 
     // Выбор системного шрифта с поддержкой кириллицы (Windows/Linux)
@@ -1024,9 +1063,9 @@ app.get('/api/assessment/latest', requireAuth, async (req, res) => {
 });
 
 // Экспорт CV в Word (DOCX)
-app.post('/api/cv/download-docx', requireAuth, async (req, res) => {
+app.post('/api/cv/download-docx', requireAuth, validateCv, async (req, res) => {
   try {
-    const cv = req.body || {};
+    const cv = req.validatedCv || {};
     const children = [];
 
     const dataUrlToBuffer = (dataUrl) => {
@@ -1170,9 +1209,9 @@ app.post('/api/cv/download-docx', requireAuth, async (req, res) => {
 });
 
 // Генерация сопроводительного письма на основе данных CV и последнего теста
-app.post('/api/cv/cover-letter', requireAuth, async (req, res) => {
+app.post('/api/cv/cover-letter', requireAuth, validateCv, async (req, res) => {
   try {
-    const cv = req.body || {};
+    const cv = req.validatedCv || {};
     const p = cv.personalInfo || {};
     const employment = Array.isArray(cv.employment) ? cv.employment : [];
     const skills = Array.isArray(cv.skills) ? cv.skills : [];
