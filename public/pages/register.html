@@ -181,6 +181,16 @@
   </main>
 
   <script>
+    // Получаем параметр next из URL
+    const params = new URLSearchParams(window.location.search);
+    const nextPage = params.get('next') || '/pages/dashboard';
+    
+    // Обновляем ссылку входа, чтобы она также содержала параметр next
+    const loginLink = document.querySelector('a[href="/pages/login"]');
+    if (loginLink) {
+      loginLink.href = `/pages/login?next=${encodeURIComponent(nextPage)}`;
+    }
+    
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       
@@ -215,7 +225,7 @@
         if (result.success) {
           showNotification(result.message, 'success');
           setTimeout(() => {
-            window.location.href = '/pages/login';
+            window.location.href = `/pages/login?next=${encodeURIComponent(nextPage)}`;
           }, 2000);
         } else {
           showNotification(result.message, 'error');

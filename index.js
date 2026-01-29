@@ -24,24 +24,24 @@ if (isProd) {
   app.set('trust proxy', 1);
 }
 
-// Подключение к MongoDB
 let isDBConnected = false;
-connectDB().then((conn) => {
-  isDBConnected = !!conn;
-}).catch(() => {
-  isDBConnected = false;
-});
+connectDB()
+  .then((conn) => {
+    isDBConnected = !!conn;
+  })
+  .catch(() => {
+    isDBConnected = false;
+  });
 
-// Fallback: простая база данных пользователей в памяти (если MongoDB недоступна)
 const users = new Map();
 const assessments = new Map();
 
-// Настройка middleware (увеличиваем лимит тела запроса для больших CV/фото)
 app.use(bodyParser.urlencoded({ extended: true, limit: '15mb' }));
 app.use(bodyParser.json({ limit: '15mb' }));
+
 const sessionSecret = process.env.SESSION_SECRET || '';
 if (!sessionSecret) {
-  console.warn('⚠️ SESSION_SECRET не задан. Используется небезопасное значение для dev.');
+  console.warn('SESSION_SECRET не задан. Установите переменную окружения для продакшена.');
 }
 
 app.use(session({
@@ -56,19 +56,13 @@ app.use(session({
   }
 }));
 
-// Раздача статических файлов из папки public
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Раздача загруженных файлов (только для авторизованных)
-// Перенесено ниже после определения requireAuth
-
-// Логирование всех запросов для отладки
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// Ограничитель для генерации тестов
 const generateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 3,
@@ -76,143 +70,369 @@ const generateLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Ограничитель для аутентификации
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Слишком много попыток. Повторите позже.'
+  message: 'Слишком много попыток. Попробуйте позже.'
 });
 
-// Главная страница
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'index.html'));
 });
 
-// Маршрут для /home — редирект на корень
 app.get('/pages/home', (req, res) => {
   res.redirect('/');
 });
 
-// Страница создания резюме
 app.get('/pages/make_CV', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'make_cv.html'));
 });
 
-// Шаблоны резюме
 app.get('/pages/cv-templates', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'cv_templates.html'));
 });
 
-// Примеры резюме
 app.get('/pages/cv-examples', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'cv_examples.html'));
 });
 
-// Статьи
 app.get('/pages/articles', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'articles.html'));
 });
 
-// Цены
 app.get('/pages/pricing', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'pricing.html'));
 });
 
-// FAQ
 app.get('/pages/faq', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'faq.html'));
 });
 
-// Авторизация
 app.get('/pages/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'login.html'));
 });
 
-// Страница регистрации
 app.get('/register', (req, res) => {
-  console.log('Маршрут /register запрошен');
   res.sendFile(path.join(__dirname, 'public', 'pages', 'register.html'));
 });
 
-// Альтернативный маршрут регистрации
 app.get('/pages/register', (req, res) => {
-  console.log('Маршрут /pages/register запрошен');
   res.sendFile(path.join(__dirname, 'public', 'pages', 'register.html'));
 });
 
-// Личный кабинет
 app.get('/pages/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'dashboard.html'));
 });
 
-// Статус системы
 app.get('/pages/status', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'status.html'));
 });
 
-// API для проверки статуса базы данных
+app.get('/pages/auth-required', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pages', 'auth-required.html'));
+});
+
 app.get('/api/db-status', (req, res) => {
-  res.json({ 
+  res.json({
     connected: isDBConnected,
     database: isDBConnected ? 'MongoDB' : 'In-Memory',
     timestamp: new Date().toISOString()
   });
 });
+app.post('/api/cv/download', requireAuth, validateCv, async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const cv = req.validatedCv || {};
+    const fs = require('fs');
 
-// POST маршрут для регистрации
+    const pickFont = () => {
+      const candidates = [
+        { regular: 'C:/Windows/Fonts/segoeui.ttf', bold: 'C:/Windows/Fonts/seguisb.ttf' },
+        { regular: 'C:/Windows/Fonts/arial.ttf', bold: 'C:/Windows/Fonts/arialbd.ttf' },
+        { regular: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', bold: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' },
+        { regular: '/usr/share/fonts/truetype/freefont/FreeSans.ttf', bold: '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf' }
+      ];
+      for (const pair of candidates) {
+        if (fs.existsSync(pair.regular)) {
+          return pair;
+        }
+      }
+      return null;
+    };
+    const fontPaths = pickFont();
+
+    const accentMap = {
+      modern: '#2563eb',
+      classic: '#111827',
+      minimal: '#374151',
+      creative: '#7c3aed',
+      european: '#2f47a3',
+      europass: '#1f3c88'
+    };
+    const accent = accentMap[cv.template] || accentMap.modern;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    const filename = `${(cv.title || 'resume').replace(/[^\w\-]+/g, '_')}.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    doc.pipe(res);
+
+    const applyFont = (weight = 'regular') => {
+      if (!fontPaths) return;
+      if (weight === 'bold' && fontPaths.bold) {
+        doc.font(fontPaths.bold);
+      } else {
+        doc.font(fontPaths.regular);
+      }
+    };
+
+    const p = cv.personalInfo || {};
+    const margins = doc.page.margins;
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const leftColWidth = 190;
+    const columnGap = 28;
+    const leftX = margins.left;
+    const topY = margins.top;
+    const rightX = leftX + leftColWidth + columnGap;
+    const rightWidth = pageWidth - margins.right - rightX;
+    const bodyHeight = pageHeight - margins.top - margins.bottom;
+
+    doc.save().rect(leftX, topY, leftColWidth, bodyHeight).fill('#f3f6fb').restore();
+    doc.save().rect(rightX, topY, rightWidth, 96).fill('#ffffff').restore();
+    doc.moveTo(rightX, topY + 96).lineTo(pageWidth - margins.right, topY + 96).strokeColor('#e2e8f0').stroke();
+
+    // Left column helpers
+    const originalX = doc.x;
+    const originalY = doc.y;
+    let leftCursor = topY + 24;
+    const writeLeftHeading = (label) => {
+      applyFont('bold');
+      doc.fontSize(11).fillColor('#8090c2').text(label.toUpperCase(), leftX + 16, leftCursor, { width: leftColWidth - 32 });
+      leftCursor = doc.y + 6;
+    };
+    const writeLeftText = (text, color = '#0f172a') => {
+      if (!text) return;
+      applyFont();
+      doc.fontSize(10).fillColor(color).text(text, leftX + 16, leftCursor, { width: leftColWidth - 32 });
+      leftCursor = doc.y + 4;
+    };
+
+    // Photo
+    const photo = p.photo;
+    if (photo && typeof photo === 'string' && photo.startsWith('data:image/')) {
+      try {
+        const base64 = photo.split(',')[1];
+        const buf = Buffer.from(base64, 'base64');
+        const photoSize = 110;
+        const photoX = leftX + (leftColWidth - photoSize) / 2;
+        const photoY = leftCursor;
+        doc.save();
+        doc.circle(photoX + photoSize / 2, photoY + photoSize / 2, photoSize / 2).clip();
+        doc.image(buf, photoX, photoY, { fit: [photoSize, photoSize], align: 'center', valign: 'center' });
+        doc.restore();
+        leftCursor = photoY + photoSize + 20;
+      } catch (_) {
+        leftCursor += 10;
+      }
+    } else {
+      leftCursor += 10;
+    }
+
+    const summaryText = (cv.additionalSections && cv.additionalSections.profile) || p.summary || cv.summary;
+    if (summaryText) {
+      writeLeftHeading('Профиль');
+      summaryText.split('\n').forEach(line => writeLeftText(line.trim(), '#475569'));
+      leftCursor += 6;
+    }
+
+    const contactLines = [
+      p.email && `Email: ${p.email}`,
+      p.phone && `Телефон: ${p.phone}`,
+      (p.address || p.city) && `Адрес: ${p.address || p.city}`,
+      p.website && `Сайт: ${p.website}`,
+      p.linkedin && `LinkedIn: ${p.linkedin}`,
+      p.birthdate && `Дата рождения: ${p.birthdate}`
+    ].filter(Boolean);
+    if (contactLines.length) {
+      writeLeftHeading('Контакты');
+      contactLines.forEach(line => writeLeftText(line));
+      leftCursor += 6;
+    }
+
+    const skills = Array.isArray(cv.skills) ? cv.skills : [];
+    if (skills.length) {
+      writeLeftHeading('Навыки');
+      skills.forEach(skill => {
+        const label = [skill.skill, skill.level].filter(Boolean).join(' — ');
+        writeLeftText(`• ${label}`);
+      });
+      leftCursor += 6;
+    }
+
+    const languages = Array.isArray(cv.languages) ? cv.languages : [];
+    if (languages.length) {
+      writeLeftHeading('Языки');
+      languages.forEach(lang => {
+        const label = [lang.language, lang.level].filter(Boolean).join(' — ');
+        writeLeftText(`• ${label}`);
+      });
+      leftCursor += 6;
+    }
+
+    doc.x = originalX;
+    doc.y = originalY;
+
+    // Right column header
+    doc.x = rightX;
+    doc.y = topY + 18;
+    const jobTitle = (p['job-position'] || p.jobPosition || '').toUpperCase();
+    if (jobTitle) {
+      applyFont('bold');
+      doc.fontSize(10).fillColor(accent).text(jobTitle, rightX, doc.y, { width: rightWidth });
+      doc.moveDown(0.2);
+    }
+
+    const nameParts = [p['given-name'] || p.givenName, p['family-name'] || p.familyName].filter(Boolean);
+    const printableName = nameParts.length ? nameParts.join('\n') : (cv.title || 'Моё резюме');
+    applyFont('bold');
+    doc.fontSize(32).fillColor('#0f172a').text(printableName, rightX, doc.y, { width: rightWidth, lineGap: 4 });
+    doc.moveDown(0.6);
+
+    const drawSectionHeading = (label) => {
+      doc.moveDown(0.8);
+      applyFont('bold');
+      doc.fontSize(11).fillColor('#94a3b8').text(label.toUpperCase(), rightX, doc.y, { width: rightWidth, characterSpacing: 1.5 });
+      doc.moveDown(0.2);
+      applyFont();
+      doc.fillColor('#111827');
+    };
+
+    const formatPeriod = (item) => {
+      const start = item.start_date || item.startDate;
+      const end = item.current ? 'По наст. время' : (item.end_date || item.endDate);
+      return [start, end].filter(Boolean).join(' — ');
+    };
+
+    const drawTimelineEntry = (title, subtitle, period, description) => {
+      if (period) {
+        applyFont('bold');
+        doc.fontSize(10).fillColor(accent).text(period, rightX, doc.y, { width: rightWidth });
+      }
+      if (title) {
+        applyFont('bold');
+        doc.fontSize(13).fillColor('#0f172a').text(title, rightX, doc.y, { width: rightWidth });
+      }
+      if (subtitle) {
+        applyFont();
+        doc.fontSize(11).fillColor('#475569').text(subtitle, rightX, doc.y, { width: rightWidth });
+      }
+      if (description) {
+        applyFont();
+        doc.fontSize(10).fillColor('#111827').text(description, rightX, doc.y, { width: rightWidth });
+      }
+      doc.moveDown(0.6);
+    };
+
+    const employment = Array.isArray(cv.employment) ? cv.employment : [];
+    if (employment.length) {
+      drawSectionHeading('Опыт работы');
+      employment.forEach(item => {
+        const period = formatPeriod(item);
+        const subtitle = [item.company, item.location].filter(Boolean).join('. ');
+        drawTimelineEntry(item.position, subtitle, period, item.description);
+      });
+    }
+
+    const education = Array.isArray(cv.education) ? cv.education : [];
+    if (education.length) {
+      drawSectionHeading('Образование');
+      education.forEach(item => {
+        const years = [item.start_year || item.startYear, item.end_year || item.endYear].filter(Boolean).join(' — ');
+        const subtitle = [item.degree, item.level].filter(Boolean).join(' · ');
+        drawTimelineEntry(item.school, subtitle, years, '');
+      });
+    }
+
+    const addSections = cv.additionalSections || {};
+    const additionalEntries = Object.entries(addSections).filter(([key, value]) => key !== 'profile' && !!value);
+    if (additionalEntries.length) {
+      drawSectionHeading('Дополнительно');
+      additionalEntries.forEach(([key, value]) => {
+        const labelMap = {
+          projects: 'Проекты',
+          certificates: 'Сертификаты',
+          courses: 'Курсы',
+          internships: 'Стажировки',
+          activities: 'Активности',
+          references: 'Рекомендации',
+          qualities: 'Качества',
+          achievements: 'Достижения',
+          signature: 'Подпись',
+          footer: 'Нижний блок',
+          assessment: 'Результаты теста',
+          custom: 'Дополнительный раздел'
+        };
+        const heading = labelMap[key] || key;
+        applyFont('bold');
+        doc.fontSize(11).fillColor('#0f172a').text(heading, rightX, doc.y, { width: rightWidth });
+        applyFont();
+        doc.fontSize(10).fillColor('#111827').text(value, rightX, doc.y, { width: rightWidth });
+        doc.moveDown(0.4);
+      });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error('Ошибка генерации PDF:', error);
+    res.status(500).json({ success: false, message: 'Не удалось создать PDF' });
+  }
+});
+
+// Регистрация пользователя
 app.post('/api/register', authLimiter, async (req, res) => {
-  const { email, password, confirmPassword, firstName, lastName } = req.body;
-  
-  // Валидация
-  if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({ success: false, message: 'Все поля обязательны для заполнения' });
+  const { firstName, lastName, email, password } = req.body || {};
+
+  if (!firstName || !lastName || !email || !password) {
+    return res.status(400).json({ success: false, message: 'Заполните все обязательные поля' });
   }
-  
-  if (password !== confirmPassword) {
-    return res.status(400).json({ success: false, message: 'Пароли не совпадают' });
-  }
-  
-  if (password.length < 6) {
-    return res.status(400).json({ success: false, message: 'Пароль должен содержать минимум 6 символов' });
-  }
-  
+
   try {
     if (isDBConnected) {
-      // Используем MongoDB
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
+      const existing = await User.findOne({ email });
+      if (existing) {
         return res.status(400).json({ success: false, message: 'Пользователь с таким email уже существует' });
       }
-      
-      const newUser = new User({
-        firstName,
-        lastName,
-        email,
-        password // Пароль будет автоматически захеширован в pre-save hook
+
+      const user = await User.create({ firstName, lastName, email, password });
+      req.session.userId = user._id;
+
+      res.json({
+        success: true,
+        message: 'Регистрация прошла успешно!',
+        user: user.getPublicProfile()
       });
-      
-      await newUser.save();
-      
-      res.json({ success: true, message: 'Регистрация прошла успешно!' });
     } else {
-      // Fallback: используем in-memory хранилище
       if (users.has(email)) {
         return res.status(400).json({ success: false, message: 'Пользователь с таким email уже существует' });
       }
-      
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      users.set(email, {
-        email,
-        password: hashedPassword,
+
+      const fallbackUser = {
+        _id: Date.now().toString(),
         firstName,
         lastName,
+        email,
+        password,
+        role: 'user',
         registeredAt: new Date(),
         resumes: []
-      });
-      
+      };
+      users.set(email, fallbackUser);
+      req.session.userId = fallbackUser._id;
+
       res.json({ success: true, message: 'Регистрация прошла успешно!' });
     }
   } catch (error) {
@@ -363,6 +583,12 @@ function requireAuth(req, res, next) {
   if (req.session.userId) {
     next();
   } else {
+    const wantsHtml = (req.headers.accept || '').includes('text/html');
+    const isApiRoute = req.path.startsWith('/api/');
+    if (wantsHtml && !isApiRoute) {
+      const nextUrl = encodeURIComponent(req.originalUrl || '/');
+      return res.redirect(`/pages/auth-required.html?next=${nextUrl}`);
+    }
     res.status(401).json({ success: false, message: 'Требуется авторизация' });
   }
 }
@@ -598,201 +824,6 @@ app.post('/api/cv/upload-photo', requireAuth, upload.single('photo'), (req, res)
   } catch (error) {
     console.error('Ошибка загрузки фото:', error);
     res.status(500).json({ success: false, message: 'Ошибка сервера' });
-  }
-});
-
-// Экспорт CV в PDF
-app.post('/api/cv/download', requireAuth, validateCv, async (req, res) => {
-  try {
-    const PDFDocument = require('pdfkit');
-    const cv = req.validatedCv || {};
-    const fs = require('fs');
-
-    // Выбор системного шрифта с поддержкой кириллицы (Windows/Linux)
-    const pickFont = () => {
-      const candidates = [
-        { regular: 'C:/Windows/Fonts/arial.ttf', bold: 'C:/Windows/Fonts/arialbd.ttf' },
-        { regular: 'C:/Windows/Fonts/segoeui.ttf', bold: 'C:/Windows/Fonts/seguisb.ttf' },
-        { regular: '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', bold: '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' },
-        { regular: '/usr/share/fonts/truetype/freefont/FreeSans.ttf', bold: '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf' }
-      ];
-      for (const p of candidates) {
-        if (fs.existsSync(p.regular)) {
-          return p;
-        }
-      }
-      return null;
-    };
-    const fontPaths = pickFont();
-
-    // Маппинг акцентного цвета по шаблону
-    const accentMap = {
-      modern: '#2563eb',
-      classic: '#111827',
-      minimal: '#374151',
-      creative: '#7c3aed'
-    };
-    const accent = accentMap[cv.template] || accentMap.modern;
-
-    res.setHeader('Content-Type', 'application/pdf');
-    const filename = `${(cv.title || 'resume').replace(/[^\w\-]+/g, '_')}.pdf`;
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
-    doc.pipe(res);
-
-    // Заголовок
-    if (fontPaths) doc.font(fontPaths.bold);
-    doc.fillColor(accent).fontSize(22).text(cv.title || 'Моё резюме', { continued: false });
-    if (fontPaths) doc.font(fontPaths.regular);
-
-    // Подзаголовок (должность)
-    const p = cv.personalInfo || {};
-    const headline = p['job-position'] || p.jobPosition || '';
-    if (headline) {
-      if (fontPaths) doc.font(fontPaths.regular);
-      doc.moveDown(0.3).fillColor('#374151').fontSize(12).text(headline);
-    }
-
-    // Контакты в строку
-    const contacts = [
-      p.email ? `Email: ${p.email}` : null,
-      p.phone ? `Тел: ${p.phone}` : null,
-      p.city ? `Город: ${p.city}` : null,
-      p.website ? `Сайт: ${p.website}` : null,
-      p.linkedin ? `LinkedIn: ${p.linkedin}` : null
-    ].filter(Boolean);
-    if (contacts.length) {
-      if (fontPaths) doc.font(fontPaths.regular);
-      doc.moveDown(0.5).fillColor('#6b7280').fontSize(10).text(contacts.join('  •  '));
-    }
-
-    // Фото (если base64)
-    const photo = p.photo;
-    let photoBox = null;
-    if (photo && typeof photo === 'string' && photo.startsWith('data:image/')) {
-      try {
-        const base64 = photo.split(',')[1];
-        const buf = Buffer.from(base64, 'base64');
-        const photoSize = 144; // увеличили картинку в PDF в 2 раза
-        const photoX = doc.page.width - 50 - photoSize;
-        const photoY = 50; // Сдвиг по Y
-
-        // Без рамок/обрезки: показываем как есть, просто вписываем в квадрат с сохранением пропорций
-        doc.image(buf, photoX, photoY, { fit: [photoSize, photoSize], align: 'center', valign: 'center' });
-
-        photoBox = { x: photoX, y: photoY, size: photoSize };
-      } catch (_) {}
-    }
-
-    // Сдвигаем курсор ниже фото, чтобы линии/секции не пересекали его по вертикали
-    if (photoBox) {
-      const targetY = photoBox.y + photoBox.size + 12;
-      if (doc.y < targetY) {
-        doc.y = targetY;
-      }
-    }
-
-    let sectionCount = 0;
-    const addSection = (title) => {
-      sectionCount += 1;
-      if (fontPaths) doc.font(fontPaths.bold);
-      doc.moveDown().fillColor(accent).fontSize(14).text(title);
-      if (sectionCount > 1) {
-        const lineEnd = photoBox ? Math.max(120, photoBox.x - 12) : doc.page.width - 50;
-        doc.moveTo(50, doc.y + 2).lineTo(lineEnd, doc.y + 2).strokeColor('#e5e7eb').stroke();
-      }
-      doc.moveDown(0.3);
-      if (fontPaths) doc.font(fontPaths.regular);
-      doc.fillColor('#111827').fontSize(11);
-    };
-
-    // Персональные данные (кроме того, что уже показали)
-    const personalPairs = [];
-    const fullName = [p['given-name'] || p.givenName, p['family-name'] || p.familyName].filter(Boolean).join(' ');
-    if (fullName) personalPairs.push(['Имя', fullName]);
-    if (p.address) personalPairs.push(['Адрес', p.address]);
-    if (p['postal-code'] || p.postalCode) personalPairs.push(['Индекс', p['postal-code'] || p.postalCode]);
-    if (personalPairs.length) {
-      addSection('Персональные данные');
-      personalPairs.forEach(([k, v]) => doc.text(`${k}: ${v}`));
-    }
-
-    // Опыт работы
-    const employment = Array.isArray(cv.employment) ? cv.employment : [];
-    if (employment.length) {
-      addSection('Опыт работы');
-      employment.forEach((item) => {
-        const position = [item.position, item.company].filter(Boolean).join(' · ');
-        const period = [item.start_date || item.startDate, item.current ? 'по наст. время' : (item.end_date || item.endDate)].filter(Boolean).join(' — ');
-        if (position) doc.fontSize(12).text(position);
-        if (period) doc.fillColor('#6b7280').fontSize(10).text(period);
-        if (item.description) doc.fillColor('#111827').fontSize(11).text(item.description);
-        doc.moveDown(0.5);
-        doc.fillColor('#111827');
-      });
-    }
-
-    // Образование
-    const education = Array.isArray(cv.education) ? cv.education : [];
-    if (education.length) {
-      addSection('Образование');
-      education.forEach((item) => {
-        const school = item.school || '';
-        const degree = [item.degree, item.level].filter(Boolean).join(' · ');
-        const years = [item.start_year || item.startYear, item.end_year || item.endYear].filter(Boolean).join(' — ');
-        if (school) doc.fontSize(12).text(school);
-        if (degree) doc.fillColor('#6b7280').fontSize(10).text(degree);
-        if (years) doc.fillColor('#6b7280').fontSize(10).text(years);
-        doc.moveDown(0.5);
-        doc.fillColor('#111827');
-      });
-    }
-
-    // Навыки
-    const skills = Array.isArray(cv.skills) ? cv.skills : [];
-    if (skills.length) {
-      addSection('Навыки');
-      const line = skills.map(s => `${s.skill || ''}${s.level ? ' · ' + s.level : ''}`).filter(Boolean).join('  •  ');
-      if (line) doc.text(line);
-    }
-
-    // Языки
-    const languages = Array.isArray(cv.languages) ? cv.languages : [];
-    if (languages.length) {
-      addSection('Языки');
-      const line = languages.map(l => `${l.language || ''}${l.level ? ' · ' + l.level : ''}`).filter(Boolean).join('  •  ');
-      if (line) doc.text(line);
-    }
-
-    // Дополнительные разделы
-    const add = cv.additionalSections || {};
-    const titleMap = {
-      profile: 'Профиль', projects: 'Проекты', certificates: 'Сертификаты', courses: 'Курсы', internships: 'Стажировки',
-      activities: 'Дополнительные виды деятельности', references: 'Рекомендации', qualities: 'Качества', achievements: 'Достижения',
-      signature: 'Подпись', footer: 'Нижний колонтитул', assessment: 'Результаты теста', custom: 'Собственный раздел'
-    };
-    for (const [key, content] of Object.entries(add)) {
-      if (!content) continue;
-      if (key === 'custom' && Array.isArray(content)) {
-        content.forEach(entry => {
-          if (!entry || (!entry.title && !entry.content)) return;
-          addSection(entry.title || 'Собственный раздел');
-          doc.text(String(entry.content || ''));
-        });
-        continue;
-      }
-      addSection(titleMap[key] || key);
-      doc.text(String(content));
-    }
-
-    doc.end();
-  } catch (error) {
-    console.error('Ошибка экспорта PDF:', error);
-    // В случае ошибки — корректный JSON
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, message: 'Ошибка сервера при экспорте PDF' });
-    }
   }
 });
 

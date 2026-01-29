@@ -150,6 +150,10 @@
     // Проверяем при загрузке страницы
     checkAuth();
     
+    // Получаем параметр next из URL
+    const params = new URLSearchParams(window.location.search);
+    const nextPage = params.get('next') || '/pages/dashboard';
+    
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       
@@ -178,7 +182,7 @@
         if (result.success) {
           showNotification(result.message, 'success');
           setTimeout(() => {
-            window.location.href = '/pages/dashboard';
+            window.location.href = nextPage;
           }, 1000);
         } else {
           showNotification(result.message, 'error');

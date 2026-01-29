@@ -136,6 +136,10 @@ class CVBuilder {
                     let payload = null;
                     // Сначала пробуем с сервера
                     const res = await fetch('/api/assessment/latest');
+                    if (res.status === 401) {
+                        this.redirectToAuthRequired();
+                        return;
+                    }
                     const data = await res.json();
                     if (res.ok && data?.success) {
                         payload = data.result;
@@ -308,6 +312,10 @@ class CVBuilder {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(this.userData)
             });
+            if (response.status === 401) {
+                this.redirectToAuthRequired();
+                return;
+            }
             const data = await response.json();
             if (!response.ok || !data?.success) {
                 throw new Error(data?.message || 'Не удалось создать письмо');
@@ -331,6 +339,10 @@ class CVBuilder {
             const id = url.searchParams.get('id');
             if (!id) return;
             const res = await fetch(`/api/cv/${id}`);
+            if (res.status === 401) {
+                this.redirectToAuthRequired();
+                return;
+            }
             const data = await res.json();
             if (res.ok && data?.success && data.cv) {
                 const cv = data.cv;
@@ -802,16 +814,15 @@ class CVBuilder {
             }
             // сервер пока возвращает JSON-заглушку
             const data = await response.json().catch(() => ({ success:false }));
-            const msg = data?.message || (response.status === 401 ? 'Требуется авторизация' : 'Ошибка при генерации PDF');
+            if (response.status === 401) {
+                this.redirectToAuthRequired();
+                return;
+            }
+            const msg = data?.message || 'Ошибка при генерации PDF';
             throw new Error(msg);
         })
         .catch(error => {
             console.error('Ошибка:', error);
-            if (String(error?.message || '').includes('Требуется авторизация')) {
-                alert('Требуется авторизация для скачивания PDF');
-                window.location.href = '/pages/login';
-                return;
-            }
             alert(`Не удалось скачать резюме: ${error.message || 'неизвестная ошибка'}`);
         });
     }
@@ -838,16 +849,15 @@ class CVBuilder {
                 return;
             }
             const data = await response.json().catch(() => ({ success:false }));
-            const msg = data?.message || (response.status === 401 ? 'Требуется авторизация' : 'Ошибка при генерации DOCX');
+            if (response.status === 401) {
+                this.redirectToAuthRequired();
+                return;
+            }
+            const msg = data?.message || 'Ошибка при генерации DOCX';
             throw new Error(msg);
         })
         .catch(error => {
             console.error('Ошибка DOCX:', error);
-            if (String(error?.message || '').includes('Требуется авторизация')) {
-                alert('Требуется авторизация для скачивания DOCX');
-                window.location.href = '/pages/login';
-                return;
-            }
             alert(`Не удалось скачать DOCX: ${error.message || 'неизвестная ошибка'}`);
         });
     }
@@ -865,7 +875,7 @@ class CVBuilder {
         try {
             const url = new URL(window.location.href);
             const tpl = url.searchParams.get('template');
-            const allowed = new Set(['modern','classic','minimal','creative']);
+            const allowed = new Set(['modern','classic','minimal','creative','european','europass']);
             if (tpl && allowed.has(tpl)) {
                 this.userData.template = tpl;
                 // визуально отметить
@@ -883,6 +893,11 @@ class CVBuilder {
     getDocumentTitle() {
         const titleInput = document.getElementById('document-title');
         return titleInput ? titleInput.value : '';
+    }
+
+    redirectToAuthRequired() {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = `/pages/auth-required.html?next=${next}`;
     }
 
     collectFormData() {
@@ -1008,6 +1023,10 @@ class CVBuilder {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(this.userData)
             });
+            if (res.status === 401) {
+                this.redirectToAuthRequired();
+                return;
+            }
             const data = await res.json().catch(() => ({}));
             if (res.ok && data?.cv?._id) {
                 this._id = data.cv._id;

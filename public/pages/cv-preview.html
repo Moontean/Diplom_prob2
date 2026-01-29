@@ -8,99 +8,133 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: Inter, system-ui, sans-serif; }
-    /* Базовые темы шаблонов */
+    .cv-card { background: var(--bg); border-radius: 1.5rem; padding: 2rem; }
+    .cv-card::selection { background: rgba(37,99,235,.15); }
+    .cv-body { display: flex; flex-direction: column; gap: 1.5rem; }
+    .cv-column { display: flex; flex-direction: column; gap: 1.25rem; }
+    .cv-left section, .cv-right section { padding: 0; border: none; }
+    .cv-title { font-size: 2rem; font-weight: 700; color: #0f172a; }
+    .cv-title-line { display: block; line-height: 1.1; }
+    .cv-header { background: var(--bg); }
+    .section-head { text-transform: none; letter-spacing: normal; }
+    .summary-text { font-size: 0.95rem; line-height: 1.6; color: #475569; }
+    .chip { display: inline-flex; align-items: center; justify-content: center; padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.85rem; margin-right: 0.4rem; margin-bottom: 0.4rem; background: var(--chip-bg); border: 1px solid var(--chip-bd); }
+    .cv-left, .cv-right { width: 100%; }
+
     .tpl-modern { --accent:#2563eb; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(37,99,235,.08); --chip-bd:#bfdbfe; }
     .tpl-classic { --accent:#111827; --bg:#ffffff; --muted:#4b5563; --chip-bg:#f3f4f6; --chip-bd:#e5e7eb; }
     .tpl-minimal { --accent:#374151; --bg:#ffffff; --muted:#9ca3af; --chip-bg:#ffffff; --chip-bd:#e5e7eb; }
     .tpl-creative { --accent:#7c3aed; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(124,58,237,.08); --chip-bd:#c4b5fd; }
+    .tpl-european { --accent:#2f47a3; --bg:#ffffff; --muted:#7c88b0; --chip-bg:rgba(47,71,163,.08); --chip-bd:#c7cefb; }
+    .tpl-europass { --accent:#1f3c88; --bg:#ffffff; --muted:#647099; --chip-bg:rgba(31,60,136,.08); --chip-bd:#cfd6ff; }
 
-    .cv-card { background: var(--bg); }
-    .accent { color: var(--accent); }
-    .muted { color: var(--muted); }
-    .divider { border-color: var(--muted); opacity: .2; }
+    .tpl-european .cv-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 2.25rem; }
+    .tpl-european .cv-left { background: #f4f6ff; border-radius: 1.5rem; padding: 1.75rem; box-shadow: inset 0 0 0 1px rgba(99,102,241,.08); }
+    .tpl-european .cv-header { margin-bottom: 0.5rem; padding-bottom: 0; }
+    .tpl-european .cv-title { font-size: 42px; letter-spacing: -0.03em; }
+    .tpl-european .cv-title-line + .cv-title-line { margin-top: -0.35rem; }
+    .tpl-european #cvPhotoWrap { width: 96px; height: 96px; border: 4px solid #fff; box-shadow: 0 12px 30px rgba(47,71,163,.25); }
+    .tpl-european .section-head { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: #94a3b8; }
+    .tpl-european #personalFields .muted { color: #94a3b8; }
+    .tpl-european #skillsList, .tpl-european #languagesList { display: block; }
 
-    /* Дополнительные вариации оформления для шаблонов */
-    /* Classic */
-    .tpl-classic .cv-card { border: 1px solid #e5e7eb; }
-    .tpl-classic h1, .tpl-classic h2 { font-family: Georgia, 'Times New Roman', serif; letter-spacing: .2px; }
-    .tpl-classic .section-head { border-left: 4px solid var(--accent); padding-left: .75rem; }
+    .tpl-europass .cv-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 2.5rem; }
+    .tpl-europass .cv-left { background: linear-gradient(180deg, #f7f9ff 0%, #eef1ff 100%); border-radius: 1.75rem; padding: 1.8rem; box-shadow: inset 0 0 0 1px rgba(31,60,136,.12); }
+    .tpl-europass .cv-right { position: relative; padding-left: 2rem; }
+    .tpl-europass .cv-right::before { content: ''; position: absolute; left: 0.6rem; top: 0.75rem; bottom: 0.75rem; width: 2px; background: rgba(31,60,136,.25); }
+    .tpl-europass .cv-title { font-size: 40px; letter-spacing: -0.025em; }
+    .tpl-europass .cv-title-line + .cv-title-line { margin-top: -0.25rem; }
+    .tpl-europass #cvPhotoWrap { width: 110px; height: 110px; border: 5px solid #fff; box-shadow: 0 16px 35px rgba(15,23,42,.25); }
+    .tpl-europass .section-head { font-size: 0.78rem; letter-spacing: 0.32em; text-transform: uppercase; color: #95a3c5; }
+    .tpl-europass #employmentList > div,
+    .tpl-europass #educationList > div { position: relative; padding-left: 1.5rem; border: none; margin-bottom: 1.75rem; }
+    .tpl-europass #employmentList > div:last-child,
+    .tpl-europass #educationList > div:last-child { margin-bottom: 0; }
+    .tpl-europass #employmentList > div::before,
+    .tpl-europass #educationList > div::before { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 999px; border: 2px solid #fff; background: var(--accent); left: -0.95rem; top: 0.25rem; box-shadow: 0 4px 12px rgba(15,23,42,.18); }
 
-    /* Minimal */
-    .tpl-minimal .divider { display:none; }
-    .tpl-minimal .section-head { text-transform: uppercase; font-size: .75rem; letter-spacing: .08em; color: var(--muted); }
-    .tpl-minimal .cv-card { box-shadow: none; border: 1px dashed #e5e7eb; }
-
-    /* Creative */
-    .tpl-creative .cv-header { background: linear-gradient(135deg, var(--accent) 0%, #22d3ee 100%); color: white; border-radius: .5rem; }
-    .tpl-creative .cv-title { color: #fff; }
-    .tpl-creative .accent { color: #fff; }
-    .tpl-creative .section-head { color: var(--accent); }
-
-    /* Chips */
-    .chip { background: var(--chip-bg); border: 1px solid var(--chip-bd); }
+    @media (max-width: 1023px) {
+      .tpl-european .cv-body { grid-template-columns: 1fr; }
+      .tpl-european .cv-left { order: 1; }
+      .tpl-european .cv-right { order: 2; }
+      .tpl-europass .cv-body { grid-template-columns: 1fr; }
+      .tpl-europass .cv-right { padding-left: 0; }
+      .tpl-europass .cv-right::before { display: none; }
+    }
   </style>
 </head>
 <body class="bg-gray-50">
   <div class="max-w-4xl mx-auto p-6">
-    <!-- Панель выбора шаблона -->
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex flex-wrap items-center justify-between mb-4 gap-3">
       <div class="text-sm text-gray-500">Выберите шаблон:</div>
-      <div class="flex gap-2" id="tplPicker">
+      <div class="flex flex-wrap gap-2" id="tplPicker">
         <button type="button" data-tpl="modern" class="px-3 py-1 text-sm rounded border">Современный</button>
         <button type="button" data-tpl="classic" class="px-3 py-1 text-sm rounded border">Классический</button>
         <button type="button" data-tpl="minimal" class="px-3 py-1 text-sm rounded border">Минималистичный</button>
         <button type="button" data-tpl="creative" class="px-3 py-1 text-sm rounded border">Креативный</button>
+        <button type="button" data-tpl="european" class="px-3 py-1 text-sm rounded border">Европейский</button>
+        <button type="button" data-tpl="europass" class="px-3 py-1 text-sm rounded border">Europass</button>
       </div>
     </div>
 
-    <div id="cvRoot" class="cv-card shadow rounded-lg p-6 tpl-modern">
-      <div class="cv-header p-4 -mx-4 -mt-4 mb-2 rounded">
-        <div class="flex items-center justify-between">
+    <div id="cvRoot" class="cv-card shadow rounded-lg tpl-modern">
+      <div class="cv-header p-4 -mx-4 -mt-4 mb-3 rounded">
+        <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 id="cvTitle" class="cv-title text-2xl font-bold">Моё резюме</h1>
-            <div id="cvHeadline" class="text-sm muted"></div>
+            <div id="cvHeadline" class="text-xs uppercase tracking-[0.3em] text-gray-400"></div>
+            <h1 id="cvTitle" class="cv-title mt-1">Моё резюме</h1>
           </div>
           <div class="flex items-center gap-3">
             <span id="cvTemplate" class="text-xs px-2 py-1 rounded border bg-white/70">modern</span>
-            <div id="cvPhotoWrap" class="w-16 h-16 rounded-full overflow-hidden border hidden">
-              <img id="cvPhoto" alt="photo" class="w-full h-full object-cover"/>
+            <div id="cvPhotoWrap" class="w-20 h-20 rounded-full overflow-hidden border hidden">
+              <img id="cvPhoto" alt="photo" class="w-full h-full object-cover" />
             </div>
           </div>
         </div>
       </div>
-      <hr class="my-4 divider">
 
-      <section id="personalInfo" class="mb-6">
-        <h2 class="section-head text-lg font-semibold accent">Персональные данные</h2>
-        <div id="personalFields" class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2"></div>
-      </section>
+      <div class="cv-body">
+        <div class="cv-left">
+          <section id="summary" class="hidden">
+            <h2 class="section-head text-sm font-semibold text-gray-500">Профиль</h2>
+            <p id="summaryContent" class="summary-text mt-2"></p>
+          </section>
 
-      <section id="employment" class="mb-6 hidden">
-        <h2 class="section-head text-lg font-semibold accent">Опыт работы</h2>
-        <div id="employmentList" class="mt-2 space-y-3"></div>
-      </section>
+          <section id="personalInfo" class="hidden">
+            <h2 class="section-head text-lg font-semibold accent">Контакты</h2>
+            <div id="personalFields" class="mt-2 grid grid-cols-1 gap-2"></div>
+          </section>
 
-      <section id="education" class="mb-6 hidden">
-        <h2 class="section-head text-lg font-semibold accent">Образование</h2>
-        <div id="educationList" class="mt-2 space-y-3"></div>
-      </section>
+          <section id="skills" class="hidden">
+            <h2 class="section-head text-lg font-semibold accent">Навыки</h2>
+            <div id="skillsList" class="mt-2"></div>
+          </section>
 
-      <section id="skills" class="mb-6 hidden">
-        <h2 class="section-head text-lg font-semibold accent">Навыки</h2>
-        <div id="skillsList" class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2"></div>
-      </section>
+          <section id="languages" class="hidden">
+            <h2 class="section-head text-lg font-semibold accent">Языки</h2>
+            <div id="languagesList" class="mt-2"></div>
+          </section>
+        </div>
 
-      <section id="languages" class="mb-6 hidden">
-        <h2 class="section-head text-lg font-semibold accent">Языки</h2>
-        <div id="languagesList" class="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2"></div>
-      </section>
+        <div class="cv-right">
+          <section id="employment" class="hidden">
+            <h2 class="section-head text-lg font-semibold accent">Опыт работы</h2>
+            <div id="employmentList" class="mt-2 space-y-4"></div>
+          </section>
 
-      <section id="additional" class="mb-6 hidden">
-        <h2 class="section-head text-lg font-semibold accent">Дополнительно</h2>
-        <div id="additionalContent" class="mt-2 space-y-2"></div>
-      </section>
+          <section id="education" class="hidden">
+            <h2 class="section-head text-lg font-semibold accent">Образование</h2>
+            <div id="educationList" class="mt-2 space-y-4"></div>
+          </section>
 
-      <div class="mt-6 flex gap-3">
+          <section id="additional" class="hidden">
+            <h2 class="section-head text-lg font-semibold accent">Дополнительно</h2>
+            <div id="additionalContent" class="mt-2 space-y-3"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-3">
         <a href="/pages/cv-builder" class="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white">Редактировать</a>
         <button id="applyTplBtn" class="inline-flex items-center px-4 py-2 rounded border">Применить шаблон</button>
       </div>
@@ -122,10 +156,9 @@
     }
 
     function applyTemplate(root, template) {
-      root.classList.remove('tpl-modern','tpl-classic','tpl-minimal','tpl-creative');
-      const map = { modern:'tpl-modern', classic:'tpl-classic', minimal:'tpl-minimal', creative:'tpl-creative' };
+      root.classList.remove('tpl-modern','tpl-classic','tpl-minimal','tpl-creative','tpl-european');
+      const map = { modern:'tpl-modern', classic:'tpl-classic', minimal:'tpl-minimal', creative:'tpl-creative', european:'tpl-european', europass:'tpl-europass' };
       root.classList.add(map[template] || 'tpl-modern');
-      // подсветка кнопок выбора
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
         if (btn.dataset.tpl === template) {
           btn.classList.add('border-blue-400','ring-2','ring-blue-200');
@@ -145,45 +178,59 @@
         window.__cvPreviewListenerAttached = true;
       }
       const data = dataOverride || getData();
+      const template = data.template || 'modern';
+      const root = document.getElementById('cvRoot');
       const titleEl = document.getElementById('cvTitle');
       const tplEl = document.getElementById('cvTemplate');
-      const root = document.getElementById('cvRoot');
       const headlineEl = document.getElementById('cvHeadline');
       const photoWrap = document.getElementById('cvPhotoWrap');
       const photoImg = document.getElementById('cvPhoto');
-      titleEl.textContent = data.title || 'Моё резюме';
-      tplEl.textContent = data.template || 'modern';
-      applyTemplate(root, data.template || 'modern');
-      // заголовок-"позиция"
+      const summarySection = document.getElementById('summary');
+      const summaryContent = document.getElementById('summaryContent');
+
+      tplEl.textContent = template;
+      applyTemplate(root, template);
       const pinfo = data.personalInfo || {};
-      headlineEl.textContent = pinfo['job-position'] || pinfo.jobPosition || '';
-      // фото
+      const headline = pinfo['job-position'] || pinfo.jobPosition || '';
+      headlineEl.textContent = headline;
+
+      const nameParts = [pinfo['given-name'] || pinfo.givenName, pinfo['family-name'] || pinfo.familyName].filter(Boolean);
+      if (['european','europass'].includes(template) && nameParts.length) {
+        titleEl.innerHTML = nameParts.map(part => `<span class="cv-title-line">${part}</span>`).join('');
+      } else {
+        const fallbackTitle = data.title || nameParts.join(' ') || 'Моё резюме';
+        titleEl.textContent = fallbackTitle;
+      }
+
       if (pinfo.photo) {
         photoImg.src = pinfo.photo;
         photoWrap.classList.remove('hidden');
       } else {
         photoWrap.classList.add('hidden');
       }
-      // Personal info
+
+      const summaryText = (data.additionalSections?.profile) || pinfo.summary || data.summary || '';
+      if (summaryText) {
+        summarySection.classList.remove('hidden');
+        summaryContent.textContent = summaryText;
+      } else {
+        summarySection.classList.add('hidden');
+        summaryContent.textContent = '';
+      }
+
       const pf = document.getElementById('personalFields');
       pf.innerHTML = '';
-      const p = data.personalInfo || {};
-      const fields = [
-        ['Имя', p['given-name']||p.givenName],
-        ['Фамилия', p['family-name']||p.familyName],
-        ['Должность', p['job-position']||p.jobPosition],
-        ['Email', p.email],
-        ['Телефон', p.phone],
-        ['Адрес', p.address],
-        ['Индекс', p['postal-code']||p.postalCode],
-        ['Город', p.city],
-        ['Дата рождения', p.birthdate],
-        ['Сайт', p.website],
-        ['LinkedIn', p.linkedin]
+      const contactFields = [
+        ['Email', pinfo.email],
+        ['Телефон', pinfo.phone],
+        ['Локация', pinfo.address || pinfo.city],
+        ['Сайт', pinfo.website],
+        ['LinkedIn', pinfo.linkedin],
+        ['Дата рождения', pinfo.birthdate]
       ];
-      const hasPersonal = fields.some(([_, v]) => !!v) || !!p.photo;
-      document.getElementById('personalInfo').classList.toggle('hidden', !hasPersonal);
-      fields.forEach(([label, value]) => {
+      const hasContacts = contactFields.some(([_, value]) => !!value);
+      document.getElementById('personalInfo').classList.toggle('hidden', !hasContacts);
+      contactFields.forEach(([label, value]) => {
         if (!value) return;
         const el = document.createElement('div');
         el.className = 'text-sm';
@@ -191,61 +238,61 @@
         pf.appendChild(el);
       });
 
-      // Employment
       const emp = Array.isArray(data.employment) ? data.employment : [];
-      document.getElementById('employment').classList.toggle('hidden', emp.length===0);
+      document.getElementById('employment').classList.toggle('hidden', emp.length === 0);
       const empList = document.getElementById('employmentList');
       empList.innerHTML = '';
       emp.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'p-3 rounded border';
-        const period = [item.start_date||item.startDate, item.current ? 'по наст. время' : (item.end_date||item.endDate || '')].filter(Boolean).join(' — ');
-        div.innerHTML = `<div class="font-medium">${item.position||''} · ${item.company||''}</div>
-                         <div class="text-sm muted">${period}</div>
-                         ${item.description ? `<div class="text-sm mt-1">${item.description}</div>` : ''}`;
-        empList.appendChild(div);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'space-y-1 border-b border-gray-100 pb-3 last:border-none last:pb-0';
+        const period = [item.start_date || item.startDate, item.current ? 'по наст. время' : (item.end_date || item.endDate || '')].filter(Boolean).join(' — ');
+        wrapper.innerHTML = `
+          ${period ? `<div class=\"text-xs uppercase tracking-[0.3em] text-[var(--muted)]\">${period}</div>` : ''}
+          <div class=\"font-semibold text-lg text-gray-900\">${item.position || ''}</div>
+          <div class=\"text-sm text-gray-500\">${item.company || ''}</div>
+          ${item.description ? `<div class=\"text-sm text-gray-700 leading-relaxed\">${item.description}</div>` : ''}
+        `;
+        empList.appendChild(wrapper);
       });
 
-      // Education
       const edu = Array.isArray(data.education) ? data.education : [];
-      document.getElementById('education').classList.toggle('hidden', edu.length===0);
+      document.getElementById('education').classList.toggle('hidden', edu.length === 0);
       const eduList = document.getElementById('educationList');
       eduList.innerHTML = '';
       edu.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'p-3 rounded border';
-        const years = [item.start_year||item.startYear, item.end_year||item.endYear].filter(Boolean).join(' — ');
-        div.innerHTML = `<div class="font-medium">${item.school||''}</div>
-                         <div class="text-sm muted">${item.degree||''} ${item.level ? '· '+item.level : ''}</div>
-                         ${years ? `<div class="text-sm muted">${years}</div>` : ''}`;
-        eduList.appendChild(div);
+        const years = [item.start_year || item.startYear, item.end_year || item.endYear].filter(Boolean).join(' — ');
+        const block = document.createElement('div');
+        block.className = 'space-y-1 border-b border-gray-100 pb-3 last:border-none last:pb-0';
+        block.innerHTML = `
+          ${years ? `<div class=\"text-xs uppercase tracking-[0.3em] text-[var(--muted)]\">${years}</div>` : ''}
+          <div class=\"font-semibold text-lg text-gray-900\">${item.school || ''}</div>
+          <div class=\"text-sm text-gray-500\">${[item.degree, item.level].filter(Boolean).join(' · ')}</div>
+        `;
+        eduList.appendChild(block);
       });
 
-      // Skills
       const skills = Array.isArray(data.skills) ? data.skills : [];
-      document.getElementById('skills').classList.toggle('hidden', skills.length===0);
+      document.getElementById('skills').classList.toggle('hidden', skills.length === 0);
       const skillsList = document.getElementById('skillsList');
       skillsList.innerHTML = '';
       skills.forEach(item => {
-        const pill = document.createElement('div');
-        pill.className = 'chip px-3 py-1 rounded-full text-sm';
-        pill.textContent = `${item.skill||''}${item.level ? ' · '+item.level : ''}`;
+        const pill = document.createElement('span');
+        pill.className = 'chip';
+        pill.textContent = `${item.skill || ''}${item.level ? ' · ' + item.level : ''}`;
         skillsList.appendChild(pill);
       });
 
-      // Languages
       const langs = Array.isArray(data.languages) ? data.languages : [];
-      document.getElementById('languages').classList.toggle('hidden', langs.length===0);
+      document.getElementById('languages').classList.toggle('hidden', langs.length === 0);
       const languagesList = document.getElementById('languagesList');
       languagesList.innerHTML = '';
       langs.forEach(item => {
-        const pill = document.createElement('div');
-        pill.className = 'chip px-3 py-1 rounded-full text-sm';
-        pill.textContent = `${item.language||''}${item.level ? ' · '+item.level : ''}`;
+        const pill = document.createElement('span');
+        pill.className = 'chip';
+        pill.textContent = `${item.language || ''}${item.level ? ' · ' + item.level : ''}`;
         languagesList.appendChild(pill);
       });
 
-      // Additional sections
       const add = data.additionalSections || {};
       const addRoot = document.getElementById('additional');
       const addCont = document.getElementById('additionalContent');
@@ -265,12 +312,12 @@
         assessment: 'Результаты теста',
         custom: 'Собственный раздел'
       };
-      const entries = Object.entries(add).filter(([_, v]) => !!v);
+      const entries = Object.entries(add).filter(([key, value]) => key !== 'profile' && !!value);
       if (entries.length) {
         addRoot.classList.remove('hidden');
         entries.forEach(([key, content]) => {
           const div = document.createElement('div');
-          div.innerHTML = `<div class="font-medium">${titleMap[key] || key}</div><div class="text-sm">${content}</div>`;
+          div.innerHTML = `<div class=\"text-sm font-semibold text-gray-700\">${titleMap[key] || key}</div><div class=\"text-sm text-gray-600 leading-relaxed\">${content}</div>`;
           addCont.appendChild(div);
         });
       } else {
@@ -287,7 +334,6 @@
       } catch (_) {}
     }
 
-    // Слушатели выбора шаблона на странице превью
     document.addEventListener('DOMContentLoaded', () => {
       render();
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
@@ -297,15 +343,17 @@
           applyTemplate(root, tpl);
           document.getElementById('cvTemplate').textContent = tpl;
           persistTemplate(tpl);
+          const data = getData();
+          data.template = tpl;
+          render(data);
         });
       });
       const applyBtn = document.getElementById('applyTplBtn');
       applyBtn.addEventListener('click', () => {
         const tpl = document.getElementById('cvTemplate').textContent;
         persistTemplate(tpl);
-        // небольшая визуальная обратная связь
         applyBtn.classList.add('bg-green-50');
-        setTimeout(()=>applyBtn.classList.remove('bg-green-50'), 300);
+        setTimeout(() => applyBtn.classList.remove('bg-green-50'), 300);
       });
     });
   </script>
