@@ -109,7 +109,7 @@ const CVSchema = new mongoose.Schema({
     },
     template: {
         type: String,
-        enum: ['modern', 'classic', 'creative', 'minimal'],
+        enum: ['modern', 'classic', 'creative', 'minimal', 'european', 'europass'],
         default: 'modern'
     },
     settings: {

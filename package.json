@@ -24,6 +24,7 @@
     "mongoose": "^8.20.0",
     "multer": "^2.0.2",
     "pdfkit": "^0.13.0",
+    "stripe": "^14.25.0",
     "zod": "^4.3.5"
   },
   "devDependencies": {

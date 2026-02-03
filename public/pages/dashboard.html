@@ -63,7 +63,7 @@
         <!-- Приветствие -->
         <div class="hero-section" style="padding: 2rem 0; margin-bottom: 3rem;">
           <h1 id="welcomeMessage" class="hero-title">Добро пожаловать в ваш личный кабинет!</h1>
-          <p class="hero-description">Управляйте своими резюме и настройками аккаунта</p>
+          <p id="subscriptionStatusLine" class="hero-description">Управляйте своими резюме и настройками аккаунта</p>
         </div>
 
         <!-- Статистика -->
@@ -104,7 +104,7 @@
         <!-- Быстрые действия -->
         <div style="background: white; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); padding: 2rem; margin-bottom: 3rem;">
           <h2 style="color: #111827; margin-bottom: 1.5rem; font-size: 1.5rem;">Быстрые действия</h2>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+          <div id="quickActions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             
             <a href="/pages/cv-builder" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; padding: 1.5rem; text-decoration: none;">
               <span style="margin-right: 0.5rem;">➕</span>
@@ -178,6 +178,17 @@
       // Обновляем приветствие
       document.getElementById('welcomeMessage').textContent = 
         `Добро пожаловать, ${currentUser.firstName}!`;
+      const sub = (currentUser.subscriptionStatus || 'none');
+      const statusMap = {
+        none: 'Нет активной подписки',
+        trialing: 'Пробный период активен',
+        active: 'Подписка активна',
+        past_due: 'Оплата просрочена',
+        canceled: 'Подписка отменена'
+      };
+      const statusText = statusMap[sub] || 'Состояние подписки неизвестно';
+      const statusLine = document.getElementById('subscriptionStatusLine');
+      statusLine.textContent = `Статус подписки: ${statusText}`;
       
       // Обновляем навигацию
       const navActions = document.getElementById('navActions');
@@ -201,6 +212,30 @@
 
       // Загрузка списка резюме
       loadResumesList();
+
+      // Кнопки для управления подпиской
+      const quickActions = document.getElementById('quickActions');
+      if (sub === 'active' || sub === 'trialing' || sub === 'past_due') {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-outline';
+        btn.style.display = 'flex';
+        btn.style.alignItems = 'center';
+        btn.style.justifyContent = 'center';
+        btn.style.padding = '1.5rem';
+        btn.innerHTML = '<span style="margin-right: 0.5rem;">💳</span> Управлять подпиской';
+        btn.onclick = openBillingPortal;
+        quickActions.appendChild(btn);
+      } else {
+        const link = document.createElement('a');
+        link.href = '/pages/pricing';
+        link.className = 'btn btn-primary';
+        link.style.display = 'flex';
+        link.style.alignItems = 'center';
+        link.style.justifyContent = 'center';
+        link.style.padding = '1.5rem';
+        link.innerHTML = '<span style="margin-right: 0.5rem;">💳</span> Оформить подписку';
+        quickActions.appendChild(link);
+      }
     }
 
     function showError() {
@@ -224,6 +259,26 @@
 
     function showSettings() {
       alert('Раздел настроек находится в разработке');
+    }
+
+    async function openBillingPortal() {
+      try {
+        const res = await fetch('/api/billing/create-portal-session', { method: 'POST' });
+        if (res.status === 401) {
+          const nextUrl = encodeURIComponent('/pages/dashboard');
+          window.location.href = `/pages/login?next=${nextUrl}`;
+          return;
+        }
+        const data = await res.json();
+        if (data && data.url) {
+          window.location.href = data.url;
+        } else {
+          alert(data.message || 'Не удалось открыть портал подписки');
+        }
+      } catch (err) {
+        console.error('Ошибка открытия портала подписки:', err);
+        alert('Ошибка. Попробуйте ещё раз позже.');
+      }
     }
 
     async function loadResumesList() {

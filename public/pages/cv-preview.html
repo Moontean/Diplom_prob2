@@ -191,7 +191,22 @@
       tplEl.textContent = template;
       applyTemplate(root, template);
       const pinfo = data.personalInfo || {};
-      const headline = pinfo['job-position'] || pinfo.jobPosition || '';
+      const useAsHeadline = !!pinfo.useAsHeadline;
+        const template = data.template || 'modern';
+        const hideHeadlineForTemplates = ['european','europass'].includes(template);
+        // Fallback: take a short summary from additionalSections.profile (or summary fields)
+        const profileText = (data.additionalSections?.profile) || pinfo.summary || data.summary || '';
+        const jobPos = pinfo['job-position'] || pinfo.jobPosition || '';
+        let headline = '';
+        if (useAsHeadline) {
+          headline = jobPos;
+        } else if (profileText) {
+          // Use a concise snippet of profile as headline
+          const snippet = String(profileText).trim().replace(/\s+/g, ' ');
+          headline = snippet.length > 90 ? snippet.slice(0, 87) + '…' : snippet;
+        }
+        headlineEl.textContent = headline;
+        headlineEl.classList.toggle('hidden', hideHeadlineForTemplates || !headline);
       headlineEl.textContent = headline;
 
       const nameParts = [pinfo['given-name'] || pinfo.givenName, pinfo['family-name'] || pinfo.familyName].filter(Boolean);

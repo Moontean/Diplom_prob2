@@ -59,6 +59,18 @@ class CVBuilder {
             formRoot.addEventListener('change', () => this.schedulePreviewUpdate());
         }
 
+        // Флажок "использовать как заголовок" для должности
+        const useAsHeadline = document.getElementById('use-as-headline');
+        if (useAsHeadline) {
+            useAsHeadline.addEventListener('change', () => {
+                try {
+                    this.userData.personalInfo = this.userData.personalInfo || {};
+                    this.userData.personalInfo.useAsHeadline = !!useAsHeadline.checked;
+                } catch (_) {}
+                this.schedulePreviewUpdate();
+            });
+        }
+
         // Отправить данные, когда iframe превью загрузится
         const previewFrame = document.getElementById('live-preview-frame');
         if (previewFrame) {
@@ -692,10 +704,15 @@ class CVBuilder {
 
         return `
         <div class="flex w-full items-center relative bg-white rounded-large draggable-section">
+            <button type="button" class="remove-section-btn absolute top-2 right-2 z-10 inline-flex items-center justify-center text-gray-500 hover:text-red-600 bg-white/95 border border-gray-200 rounded-full p-2 shadow-sm focus-visible:ring-2 ring-red-200" data-section="${sectionType}" aria-label="Удалить раздел">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-4 h-4">
+                    <path fill="currentColor" d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>
+                </svg>
+            </button>
             <div class="w-full flex relative flex-col">
                 <div class="w-full border-b border-gray-200 collapsible-section">
                     <div class="flex items-stretch w-full">
-                        <button type="button" class="flex-grow py-3 pe-6 text-start overflow-hidden rounded focus-visible:ring-4 ring-brand-200 ring-inset">
+                        <button type="button" class="flex-grow py-3 pe-10 text-start overflow-hidden rounded focus-visible:ring-4 ring-brand-200 ring-inset">
                             <h3 class="text-xl truncate text-gray-800 font-bold select-none">${config.title}</h3>
                         </button>
                         <div class="py-6 flex whitespace-nowrap items-start gap-2">
@@ -708,11 +725,6 @@ class CVBuilder {
                                     <path fill="currentColor" d="M450.001-450.001h-200q-12.75 0-21.375-8.628t-8.625-21.384 8.625-21.371 21.375-8.615h200v-200q0-12.75 8.628-21.375t21.384-8.625 21.371 8.625 8.615 21.375v200h200q12.75 0 21.375 8.628t8.625 21.384-8.625 21.371-21.375 8.615h-200v200q0 12.75-8.628 21.375t-21.384 8.625-21.371-8.625-8.615-21.375z"></path>
                                 </svg>
                             </button>` : ''}
-                            <button type="button" class="remove-section-btn text-gray-400 hover:text-red-500" data-section="${sectionType}">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5">
-                                    <path fill="currentColor" d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>
-                                </svg>
-                            </button>
                         </div>
                     </div>
                     <div id="${sectionType}-items" class="${config.template === 'textarea' ? 'mb-4' : 'hidden'}">
@@ -931,6 +943,12 @@ class CVBuilder {
             }
         });
 
+        // Флаг использования должности как заголовка
+        const useAsHeadlineEl = document.getElementById('use-as-headline');
+        if (useAsHeadlineEl) {
+            formData.personalInfo.useAsHeadline = !!useAsHeadlineEl.checked;
+        }
+
         // Добавление фото
         if (this.userData.personalInfo.photo) {
             formData.personalInfo.photo = this.userData.personalInfo.photo;
@@ -1085,7 +1103,11 @@ class CVBuilder {
 
             const element = document.getElementById(key);
             if (element) {
-                element.value = this.userData.personalInfo[key];
+                if (element.type === 'checkbox') {
+                    element.checked = !!this.userData.personalInfo[key];
+                } else {
+                    element.value = this.userData.personalInfo[key];
+                }
             }
         });
 

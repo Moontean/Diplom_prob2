@@ -19,6 +19,70 @@ const { cvSchema } = require('./services/cvValidation');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
+const Stripe = require('stripe');
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+
+// ===== Stripe Webhook (должен идти до JSON парсера) =====
+// Используем express.raw для проверки подписи
+app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe) return res.status(200).json({ received: true });
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Ошибка проверки сигнатуры Stripe:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        const stripeCustomerId = sub.customer;
+        const status = sub.status;
+        const currentPeriodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+        const item = Array.isArray(sub.items?.data) ? sub.items.data[0] : null;
+        const priceId = item?.price?.id || null;
+        const planId = item?.plan?.id || null;
+        if (isDBConnected) {
+          await User.findOneAndUpdate({ stripeCustomerId }, { subscriptionStatus: status, currentPeriodEnd, priceId, planId });
+        } else {
+          for (const u of users.values()) {
+            if (u.stripeCustomerId === stripeCustomerId) {
+              u.subscriptionStatus = status;
+              u.currentPeriodEnd = currentPeriodEnd;
+              u.priceId = priceId;
+              u.planId = planId;
+            }
+          }
+        }
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        const stripeCustomerId = sub.customer;
+        if (isDBConnected) {
+          await User.findOneAndUpdate({ stripeCustomerId }, { subscriptionStatus: 'canceled' });
+        } else {
+          for (const u of users.values()) {
+            if (u.stripeCustomerId === stripeCustomerId) {
+              u.subscriptionStatus = 'canceled';
+            }
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Ошибка обработки вебхука Stripe:', error);
+    res.status(500).send('Webhook handler failed');
+  }
+});
 
 if (isProd) {
   app.set('trust proxy', 1);
@@ -140,6 +204,96 @@ app.get('/api/db-status', (req, res) => {
     database: isDBConnected ? 'MongoDB' : 'In-Memory',
     timestamp: new Date().toISOString()
   });
+});
+
+// ===== Stripe Billing API =====
+// Создание Checkout Session (подписка)
+app.post('/api/billing/create-checkout-session', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ success: false, message: 'Stripe не сконфигурирован. Установите STRIPE_SECRET_KEY в .env' });
+    }
+    const { plan = 'basic' } = req.body || {};
+    const priceId = plan === 'premium' ? process.env.STRIPE_PRICE_PREMIUM : process.env.STRIPE_PRICE_BASIC;
+    if (!priceId) {
+      return res.status(400).json({ success: false, message: 'Не задан идентификатор цены для выбранного плана' });
+    }
+
+    let email;
+    let userRecord = null;
+    if (isDBConnected) {
+      userRecord = await User.findById(req.session.userId);
+      if (!userRecord) return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+      email = userRecord.email;
+    } else {
+      // Fallback
+      const byEmail = users.get(req.session.userId);
+      const byId = [...users.values()].find(u => u._id?.toString() === req.session.userId?.toString());
+      userRecord = byEmail || byId;
+      if (!userRecord) return res.status(404).json({ success: false, message: 'Пользователь не найден' });
+      email = userRecord.email;
+    }
+
+    let customerId = userRecord.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email,
+        metadata: { userId: String(userRecord._id || req.session.userId) }
+      });
+      customerId = customer.id;
+      if (isDBConnected) {
+        userRecord.stripeCustomerId = customerId;
+        await userRecord.save();
+      } else {
+        userRecord.stripeCustomerId = customerId;
+        users.set(userRecord.email, userRecord);
+      }
+    }
+
+    const successUrl = `${req.protocol}://${req.get('host')}/pages/dashboard?checkout=success`;
+    const cancelUrl = `${req.protocol}://${req.get('host')}/pages/pricing?checkout=cancel`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      allow_promotion_codes: true
+    });
+
+    res.json({ success: true, url: session.url });
+  } catch (error) {
+    console.error('Ошибка создания Checkout Session:', error);
+    res.status(500).json({ success: false, message: 'Не удалось создать сессию оплаты' });
+  }
+});
+
+// Сессия портала биллинга (управление подпиской)
+app.post('/api/billing/create-portal-session', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ success: false, message: 'Stripe не сконфигурирован' });
+    }
+    let userRecord;
+    if (isDBConnected) {
+      userRecord = await User.findById(req.session.userId);
+    } else {
+      userRecord = users.get(req.session.userId) || [...users.values()].find(u => u._id?.toString() === req.session.userId?.toString());
+    }
+    if (!userRecord || !userRecord.stripeCustomerId) {
+      return res.status(400).json({ success: false, message: 'У пользователя нет Stripe Customer' });
+    }
+    const returnUrl = `${req.protocol}://${req.get('host')}/pages/dashboard`;
+    const session = await stripe.billingPortal.sessions.create({
+      customer: userRecord.stripeCustomerId,
+      return_url: returnUrl
+    });
+    res.json({ success: true, url: session.url });
+  } catch (error) {
+    console.error('Ошибка создания Portal Session:', error);
+    res.status(500).json({ success: false, message: 'Не удалось открыть портал подписки' });
+  }
 });
 app.post('/api/cv/download', requireAuth, validateCv, async (req, res) => {
   try {
@@ -593,6 +747,31 @@ function requireAuth(req, res, next) {
   }
 }
 
+// Middleware: Требуется активная подписка для премиум-функций
+async function requirePremium(req, res, next) {
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ success: false, message: 'Требуется авторизация' });
+    }
+    if (isDBConnected) {
+      const user = await User.findById(req.session.userId).select('subscriptionStatus');
+      if (user && user.subscriptionStatus === 'active') return next();
+    } else {
+      // In-memory fallback
+      const byEmail = users.get(req.session.userId);
+      const byId = [...users.values()].find(u => u._id?.toString() === req.session.userId?.toString());
+      const u = byEmail || byId;
+      if (u && u.subscriptionStatus === 'active') return next();
+    }
+    const wantsHtml = (req.headers.accept || '').includes('text/html');
+    if (wantsHtml) return res.redirect('/pages/pricing');
+    return res.status(403).json({ success: false, message: 'Требуется активная подписка' });
+  } catch (err) {
+    console.error('Ошибка проверки подписки:', err);
+    return res.status(500).json({ success: false, message: 'Ошибка проверки подписки' });
+  }
+}
+
 function validateCv(req, res, next) {
   const parsed = cvSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -866,6 +1045,7 @@ app.listen(PORT, () => {
   console.log('   GET  /api/assessment');
 });
 
+
 // ===== API МАРШРУТЫ ДЛЯ ОЦЕНОК (AI ТЕСТЫ) =====
 
 // Страница тестов (UI)
@@ -1094,7 +1274,7 @@ app.get('/api/assessment/latest', requireAuth, async (req, res) => {
 });
 
 // Экспорт CV в Word (DOCX)
-app.post('/api/cv/download-docx', requireAuth, validateCv, async (req, res) => {
+app.post('/api/cv/download-docx', requireAuth, requirePremium, validateCv, async (req, res) => {
   try {
     const cv = req.validatedCv || {};
     const children = [];

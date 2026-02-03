@@ -128,7 +128,7 @@
             </li>
           </ul>
           
-          <button class="btn btn-primary" style="width: 100%;">
+          <button class="btn btn-primary" style="width: 100%;" data-plan="basic">
             Выбрать план
           </button>
         </div>
@@ -167,7 +167,7 @@
             </li>
           </ul>
           
-          <button class="btn btn-outline" style="width: 100%;">
+          <button class="btn btn-outline" style="width: 100%;" data-plan="premium">
             Выбрать план
           </button>
         </div>
@@ -205,5 +205,36 @@
   </footer>
 
   <script src="/js/main.js"></script>
+  <script>
+    (function(){
+      const btns = document.querySelectorAll('[data-plan]');
+      btns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const plan = btn.getAttribute('data-plan') || 'basic';
+          try {
+            const res = await fetch('/api/billing/create-checkout-session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ plan })
+            });
+            if (res.status === 401) {
+              const nextUrl = encodeURIComponent('/pages/pricing');
+              window.location.href = `/pages/login?next=${nextUrl}`;
+              return;
+            }
+            const data = await res.json();
+            if (data && data.url) {
+              window.location.href = data.url;
+            } else {
+              alert(data.message || 'Не удалось создать сессию оплаты');
+            }
+          } catch (err) {
+            alert('Ошибка при создании оплаты. Попробуйте позже.');
+            console.error(err);
+          }
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

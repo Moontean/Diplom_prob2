@@ -44,6 +44,24 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date
   },
+  stripeCustomerId: {
+    type: String,
+    index: true
+  },
+  subscriptionStatus: {
+    type: String,
+    enum: ['none', 'trialing', 'active', 'past_due', 'canceled'],
+    default: 'none'
+  },
+  currentPeriodEnd: {
+    type: Date
+  },
+  planId: {
+    type: String
+  },
+  priceId: {
+    type: String
+  },
   resumes: [{
     title: String,
     template: String,
@@ -82,7 +100,11 @@ userSchema.methods.getPublicProfile = function() {
     email: this.email,
     role: this.role,
     registeredAt: this.registeredAt,
-    lastLogin: this.lastLogin
+    lastLogin: this.lastLogin,
+    subscriptionStatus: this.subscriptionStatus || 'none',
+    planId: this.planId || null,
+    priceId: this.priceId || null,
+    currentPeriodEnd: this.currentPeriodEnd || null
   };
 };
 
