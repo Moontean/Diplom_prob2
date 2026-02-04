@@ -20,12 +20,12 @@ PORT=3000
 NODE_ENV=development
 SESSION_SECRET=replace_with_a_secure_random_string
 
+
 STRIPE_SECRET_KEY=<STRIPE_SECRET_KEY>
 STRIPE_PRICE_BASIC=<PRICE_ID_BASIC>
 STRIPE_PRICE_PREMIUM=<PRICE_ID_PREMIUM>
 STRIPE_WEBHOOK_SECRET=<WEBHOOK_SECRET>
 ```
-
 - `STRIPE_SECRET_KEY`: Stripe test secret key from https://dashboard.stripe.com/test/developers
 - `STRIPE_PRICE_BASIC`, `STRIPE_PRICE_PREMIUM`: Price IDs from step 2
 - `STRIPE_WEBHOOK_SECRET`: See step 4
