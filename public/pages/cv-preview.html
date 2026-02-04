@@ -61,6 +61,19 @@
       .tpl-europass .cv-right { padding-left: 0; }
       .tpl-europass .cv-right::before { display: none; }
     }
+
+    /* Subtle flash when headline appears/updates */
+    .headline-flash {
+      animation: headlineFade 900ms ease-out;
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    @keyframes headlineFade {
+      0% { background: rgba(59, 130, 246, 0.20); }
+      50% { background: rgba(59, 130, 246, 0.10); }
+      100% { background: transparent; }
+    }
   </style>
 </head>
 <body class="bg-gray-50">
@@ -192,22 +205,26 @@
       applyTemplate(root, template);
       const pinfo = data.personalInfo || {};
       const useAsHeadline = !!pinfo.useAsHeadline;
-        const template = data.template || 'modern';
-        const hideHeadlineForTemplates = ['european','europass'].includes(template);
-        // Fallback: take a short summary from additionalSections.profile (or summary fields)
-        const profileText = (data.additionalSections?.profile) || pinfo.summary || data.summary || '';
-        const jobPos = pinfo['job-position'] || pinfo.jobPosition || '';
-        let headline = '';
-        if (useAsHeadline) {
-          headline = jobPos;
-        } else if (profileText) {
-          // Use a concise snippet of profile as headline
-          const snippet = String(profileText).trim().replace(/\s+/g, ' ');
-          headline = snippet.length > 90 ? snippet.slice(0, 87) + '…' : snippet;
+      let headline = '';
+      if (useAsHeadline) {
+        // Primary: desired job position
+        headline = pinfo['job-position'] || pinfo.jobPosition || '';
+        // Fallback: first education degree ("Специальность") if job position is empty
+        if (!headline && Array.isArray(data.education) && data.education.length) {
+          const firstEdu = data.education[0] || {};
+          headline = firstEdu.degree || '';
         }
-        headlineEl.textContent = headline;
-        headlineEl.classList.toggle('hidden', hideHeadlineForTemplates || !headline);
+      }
+      // Update headline content and trigger subtle flash
       headlineEl.textContent = headline;
+      if (headline && headlineEl) {
+        headlineEl.classList.remove('headline-flash');
+        // force reflow to restart animation
+        void headlineEl.offsetWidth;
+        headlineEl.classList.add('headline-flash');
+      } else {
+        headlineEl.classList.remove('headline-flash');
+      }
 
       const nameParts = [pinfo['given-name'] || pinfo.givenName, pinfo['family-name'] || pinfo.familyName].filter(Boolean);
       if (['european','europass'].includes(template) && nameParts.length) {

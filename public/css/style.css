@@ -136,22 +136,29 @@ body {
 .nav-link:hover {
 .nav-dropdown.open .nav-dropdown-menu {
   opacity: 1;
+
+/* === CV Builder: Headline Toggle Animation === */
+/* Toggle wrapper turns blue when active; knob slides right with glow */
   visibility: visible;
   transform: translateY(0);
 }
 
+
 .nav-dropdown.open .dropdown-arrow {
   transform: rotate(180deg);
 }
+
   color: #111827;
 }
 
 .nav-actions {
   display: flex;
   .nav-menu.open {
+
     display: flex !important;
     flex-direction: column;
     gap: 0.5rem;
+
     position: absolute;
     top: 60px;
     left: 0;
@@ -695,4 +702,91 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Контейнер для переключателя */
+.cursor-pointer {
+  position: relative;
+  display: inline-block;
+  width: 60px; /* Ширина переключателя */
+  height: 34px; /* Высота переключателя */
+}
+
+/* Скрываем стандартный HTML чекбокс */
+.cursor-pointer input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Элемент ползунка (трек/фон) */
+.checkbox{
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc; /* Цвет фона в выключенном состоянии */
+  -webkit-transition: .4s; /* Плавный переход для WebKit */
+  transition: .4s; /* Плавный переход */
+}
+
+/* Круглый ползунок внутри трека (::before) */
+.checkbox:before {
+  position: absolute;
+  content: "";
+  height: 26px; /* Высота ползунка */
+  width: 26px; /* Ширина ползунка */
+  left: 4px; /* Отступ слева */
+  bottom: 4px; /* Отступ снизу */
+  background-color: white; /* Цвет ползунка */
+  -webkit-transition: .4s; /* Плавный переход для WebKit */
+  transition: .4s; /* Плавный переход */
+}
+
+/* Когда чекбокс отмечен (состояние 'on') */
+input:checked + .checkbox {
+  background-color: #2196F3; /* Цвет фона во включенном состоянии (синий) */
+}
+
+/* Перемещение ползунка при включении */
+input:checked + .checkbox:before {
+  -webkit-transform: translateX(26px); /* Перемещение вправо для WebKit */
+  -ms-transform: translateX(26px); /* Перемещение вправо для IE */
+  transform: translateX(26px); /* Перемещение вправо */
+}
+
+/* Дополнительные стили для скругления углов */
+.checkbox.round {
+  border-radius: 34px;
+}
+
+.checkbox.round:before {
+  border-radius: 50%; /* Делает ползунок круглым */
+}
+
+/* Small toggle variant used in CV builder */
+.toggle-wrapper {
+  width: 28px;
+  height: 16px;
+}
+
+.toggle-wrapper .checkbox {
+  border-radius: 16px;
+}
+
+.toggle-wrapper .checkbox:before {
+  width: 12px;
+  height: 12px;
+  left: 2px;
+  bottom: 2px;
+}
+
+.toggle-wrapper input:checked + .checkbox {
+  background-color: #3b82f6;
+}
+
+.toggle-wrapper input:checked + .checkbox:before {
+  transform: translateX(12px);
 }

@@ -20,10 +20,10 @@ PORT=3000
 NODE_ENV=development
 SESSION_SECRET=replace_with_a_secure_random_string
 
-STRIPE_SECRET_KEY=***REMOVED***
-STRIPE_PRICE_BASIC=price_XXXXXXXXXXXXXXXXXXXXXXXX
-STRIPE_PRICE_PREMIUM=price_XXXXXXXXXXXXXXXXXXXXXXXX
-STRIPE_WEBHOOK_SECRET=whsec_XXXXXXXXXXXXXXXXXXXXXXXX
+STRIPE_SECRET_KEY=<STRIPE_SECRET_KEY>
+STRIPE_PRICE_BASIC=<PRICE_ID_BASIC>
+STRIPE_PRICE_PREMIUM=<PRICE_ID_PREMIUM>
+STRIPE_WEBHOOK_SECRET=<WEBHOOK_SECRET>
 ```
 
 - `STRIPE_SECRET_KEY`: Stripe test secret key from https://dashboard.stripe.com/test/developers
@@ -37,7 +37,7 @@ Run the listener and copy the webhook secret:
 stripe listen --forward-to localhost:3000/webhooks/stripe
 ```
 
-This prints `whsec_...`. Paste it into `.env` as `STRIPE_WEBHOOK_SECRET`.
+This prints a webhook secret. Paste it into `.env` as `STRIPE_WEBHOOK_SECRET` (use the value shown by the CLI).
 
 > If you skip the webhook, checkout works but subscription status won't sync automatically. You can still test checkout redirection.
 

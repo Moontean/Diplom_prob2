@@ -63,11 +63,22 @@ class CVBuilder {
         const useAsHeadline = document.getElementById('use-as-headline');
         if (useAsHeadline) {
             useAsHeadline.addEventListener('change', () => {
+                // Toggle visual state on wrapper for blue animation
+                const wrapper = useAsHeadline.parentElement;
+                if (wrapper) {
+                    if (useAsHeadline.checked) {
+                        wrapper.classList.add('toggle-on');
+                    } else {
+                        wrapper.classList.remove('toggle-on');
+                    }
+                }
+
+                // Persist flag and update preview immediately
                 try {
                     this.userData.personalInfo = this.userData.personalInfo || {};
                     this.userData.personalInfo.useAsHeadline = !!useAsHeadline.checked;
                 } catch (_) {}
-                this.schedulePreviewUpdate();
+                this.pushLivePreview();
             });
         }
 
