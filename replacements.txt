@@ -1,1 +1,3 @@
 regex:\bsk_(live|test)_[0-9A-Za-z]+\b==>***REMOVED***
+regex:\bwhsec_[0-9A-Za-z]+\b==>***REMOVED***
+regex:\bpk_(live|test)_[0-9A-Za-z]+\b==>***REMOVED***
