@@ -35,6 +35,7 @@
         }
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
     <style>
         .scrollable-container-grid {
             grid-template-columns: repeat(var(--amount-items, 1), minmax(0, 1fr));
@@ -90,7 +91,7 @@
     </style>
     
     <!-- Верхняя панель инструментов -->
-    <div class="fixed top-0 start-0 end-0 z-20" id="document-toolbar">
+    <div class="fixed top-0 start-0 end-0" style="z-index: 20;" id="document-toolbar">
         <div class="flex items-center bg-gray-900 p-2 lg:p-3">
             <!-- Кнопка возврата -->
             <div class="flex items-center">
@@ -129,6 +130,19 @@
 
             <!-- Панель действий -->
             <div class="ms-auto flex items-start">
+                <!-- Undo/Redo -->
+                <button class="inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-white active:bg-gray-100 can-hover:active:bg-gray-100 text-gray-800 border-gray-300 can-hover:hover:bg-brand-50 can-hover:hover:border-brand-400 font-medium py-1 lg:py-2 ps-2 pe-3 text-base me-2"
+                        type="button" id="undo-btn" title="Отменить (Ctrl+Z)" style="outline: none;">
+                    <span class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="pointer-events-none flex-shrink-0 box-content h-6 w-6"><path fill="currentColor" d="M480-180.001q-124.923 0-212.461-87.539-87.539-87.539-87.539-212.462 0-124.923 87.539-212.462 87.538-87.538 212.461-87.538 61.538 0 118.308 23 56.769 23 98.23 64.347v-87.386q0-12.77 8.616-21.385t21.384-8.615 21.384 8.615T748.922-791v198.001H550.922q-12.769 0-21.384-8.616-8.616-8.615-8.616-21.384 0-12.769 8.616-21.384 8.615-8.616 21.384-8.616h137.232q-30.231-40.001-75.386-62.077-45.154-22.077-97.768-22.077-102.154 0-173.001 70.847-70.846 70.846-70.846 173.001 0 102.154 70.846 173.001 70.847 70.846 173.001 70.846 93.924 0 162.731-58.628 68.807-58.629 82.807-149.319 2.77-12.77 12.501-20.654 9.73-7.883 22.5-5.423 12.385 2.846 20.385 12.27 8.001 9.423 6.001 21.692-17.616 111.615-101.654 186.654Q614.693-180.001 480-180.001Z"/></svg>
+                    </span>
+                </button>
+                <button class="inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-white active:bg-gray-100 can-hover:active:bg-gray-100 text-gray-800 border-gray-300 can-hover:hover:bg-brand-50 can-hover:hover:border-brand-400 font-medium py-1 lg:py-2 ps-2 pe-3 text-base me-2"
+                        type="button" id="redo-btn" title="Повторить (Ctrl+Y)" style="outline: none;">
+                    <span class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="pointer-events-none flex-shrink-0 box-content h-6 w-6"><path fill="currentColor" d="M480-180.001q-134.693 0-218.73-75.039-84.039-75.039-101.654-186.654-2-12.269 6.001-21.692 8-9.424 20.385-12.27 12.77-2.46 22.5 5.423 9.731 7.884 12.501 20.654 14 90.69 82.807 149.319 68.807 58.628 162.731 58.628 102.154 0 173.001-70.846 70.846-70.847 70.846-173.001 0-102.155-70.846-173.001-70.847-70.847-173.001-70.847-52.614 0-97.768 22.077-45.155 22.076-75.386 62.077h137.232q12.769 0 21.384 8.616 8.616 8.615 8.616 21.384 0 12.769-8.616 21.384-8.615 8.616-21.384 8.616H211.078V-791q0-12.769 8.615-21.384 8.616-8.615 21.384-8.615t21.384 8.615q8.616 8.615 8.616 21.384v87.386q41.461-41.347 98.23-64.347t118.308-23q124.923 0 212.461 87.538 87.539 87.539 87.539 212.462 0 124.923-87.539 212.462-87.538 87.539-212.461 87.539Z"/></svg>
+                    </span>
+                </button>
                 <div class="flex items-center me-2 relative">
                     <button class="inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-gray-900 active:bg-gray-700 can-hover:active:bg-gray-700 text-white border-gray-600 can-hover:hover:bg-gray-800 font-medium py-1 lg:py-2 ps-1 pe-1 lg:ps-2 lg:pe-2 text-base" 
                             type="button" 
@@ -181,6 +195,15 @@
                     </span>
                     <span class="sr-only">Скачать</span>
                 </button>
+                <button class="inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-white active:bg-gray-100 can-hover:active:bg-gray-100 text-gray-800 border-gray-300 can-hover:hover:bg-brand-50 can-hover:hover:border-brand-400 font-medium py-1 lg:py-2 ps-2 pe-3 text-base ml-2" 
+                        type="button"
+                        id="download-png-btn"
+                        style="outline: none;">
+                    <span class="relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="pointer-events-none flex-shrink-0 box-content h-6 w-6"><path fill="currentColor" d="M240-120q-30 0-51-21t-21-51v-576q0-30 21-51t51-21h456q12 0 23 4.5t19 12.5l126 126q8 8 12.5 19t4.5 23v463q0 30-21 51t-51 21H240Zm0-72h480v-426L600-792H240v600Zm168-72q12 0 21-9t9-21v-168q0-12-9-21t-21-9h-96q-12 0-21 9t-9 21v168q0 12 9 21t21 9h96Zm168 0q12 0 21-9t9-21v-96q0-12-9-21t-21-9h-96q-12 0-21 9t-9 21v96q0 12 9 21t21 9h96Z"/></svg>
+                    </span>
+                    <span class="sr-only">Скачать PNG</span>
+                </button>
                 <button class="hidden sm:inline-flex border justify-center rounded-brand relative overflow-hidden max-w-full focus-visible:ring-4 ring-brand-200 items-center bg-white active:bg-gray-100 can-hover:active:bg-gray-100 text-gray-800 border-gray-300 can-hover:hover:bg-gray-50 can-hover:hover:border-brand-400 font-medium py-1 lg:py-2 ps-1 pe-2 lg:ps-2 lg:pe-3 text-base ml-2" 
                         type="button"
                         id="download-docx-btn"
@@ -208,8 +231,129 @@
     </div>
 
     <!-- Основной контент -->
-    <div id="builder-wrapper" class="bg-white fixed start-0 bottom-0 w-full px-5 pb-10 overflow-y-auto" style="top: 49.6px;">
-        <div class="mx-auto max-w-2xl">
+    <div id="builder-wrapper" class="bg-white fixed start-0 bottom-0 w-full px-5 pb-10 overflow-y-auto" style="top: 49.6px; z-index: 5;">
+        <!-- Левая панель -->
+        <aside id="left-sidebar" class="hidden lg:block fixed top-[50px] left-0 bottom-0 w-64 bg-white border-r border-gray-200 p-3 overflow-y-auto sidebar-dark" style="z-index: 15;">
+            <!-- Группа: Элементы -->
+            <div class="sidebar-group">
+                <button type="button" class="sidebar-group-header" data-collapse-target="#group-elements" aria-expanded="true">
+                    <span class="icon-wrap" aria-hidden="true">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M3 6h18v2H3zM3 11h18v2H3zM3 16h18v2H3z"/></svg>
+                    </span>
+                    <span class="sidebar-group-title">Элементы</span>
+                    <span class="chevron" aria-hidden="true">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"/></svg>
+                    </span>
+                </button>
+                <div id="group-elements" class="sidebar-group-content">
+                    <div id="elements-panel" class="flex flex-col gap-1">
+                        <button class="add-section-btn sidebar-item" data-section="profile">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z"/></svg>
+                            </span>
+                            <span>Профиль</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="projects">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M4 5h16v4H4zM4 11h16v8H4z"/></svg>
+                            </span>
+                            <span>Проекты</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="certificates">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4h16v12H4zM8 20l4-2 4 2v-4H8z"/></svg>
+                            </span>
+                            <span>Сертификаты</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="courses">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M3 6l9-4 9 4-9 4-9-4zm0 6l9 4 9-4"/></svg>
+                            </span>
+                            <span>Курсы</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="internships">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M6 7h12v10H6zM9 7V5h6v2"/></svg>
+                            </span>
+                            <span>Стажировки</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="activities">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L1 9h7z"/></svg>
+                            </span>
+                            <span>Деятельность</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="references">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4h12v16H4zM18 7h2v10h-2z"/></svg>
+                            </span>
+                            <span>Рекомендации</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="qualities">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 17l-5 3 2-5-4-4 5-.5L12 5l2 5.5 5 .5-4 4 2 5z"/></svg>
+                            </span>
+                            <span>Качества</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="achievements">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l2.5 7.5H22l-6 4.5 2.5 7.5L12 17l-6 4.5L8.5 14 2 9.5h7.5z"/></svg>
+                            </span>
+                            <span>Достижения</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="signature">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M3 12h13M3 16h9M3 8h9"/></svg>
+                            </span>
+                            <span>Подпись</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="footer">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M4 18h16v2H4zM4 4h16v10H4z"/></svg>
+                            </span>
+                            <span>Нижний колонтитул</span>
+                        </button>
+                        <button class="add-section-btn sidebar-item" data-section="custom">
+                            <span class="icon-wrap" aria-hidden="true">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>
+                            </span>
+                            <span>Собственный раздел</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Группа: Быстрые стили -->
+            <div class="sidebar-group">
+                <button type="button" class="sidebar-group-header" data-collapse-target="#group-styles" aria-expanded="true">
+                    <span class="icon-wrap" aria-hidden="true">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3a9 9 0 00-9 9 7 7 0 007 7h5a4 4 0 000-8h-1a2 2 0 110-4h1a3 3 0 000-6H12z"/></svg>
+                    </span>
+                    <span class="sidebar-group-title">Быстрые стили</span>
+                    <span class="chevron" aria-hidden="true">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"/></svg>
+                    </span>
+                </button>
+                <div id="group-styles" class="sidebar-group-content">
+                    <div class="flex flex-wrap gap-2 mb-3" id="quick-colors">
+                        <button class="px-2 py-1 text-xs rounded border sidebar-chip" data-color="blue">Синий</button>
+                        <button class="px-2 py-1 text-xs rounded border sidebar-chip" data-color="emerald">Зелёный</button>
+                        <button class="px-2 py-1 text-xs rounded border sidebar-chip" data-color="rose">Розовый</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-gray-400">Размер шрифта:</span>
+                        <select id="quick-fontsize" class="border rounded px-2 py-1 text-sm sidebar-select">
+                            <option value="small">Мелкий</option>
+                            <option value="medium" selected>Обычный</option>
+                            <option value="large">Крупный</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        <div class="mx-auto max-w-2xl lg:ml-64">
             <div class="pt-5">
                 <!-- Быстрые действия -->
                 <div class="w-full max-w-full overflow-visible pb-px">
@@ -256,6 +400,22 @@
                     </div>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Выберите стиль оформления: сохранится вместе с резюме и применится в предварительном просмотре и экспорте.</p>
+            </div>
+            <!-- Быстрые стили (дублируем для мобильных) -->
+            <div class="lg:hidden mb-3">
+                <div class="flex flex-wrap gap-2 mb-2" id="quick-colors-mobile">
+                    <button class="px-2 py-1 text-xs rounded border" data-color="blue">Синий</button>
+                    <button class="px-2 py-1 text-xs rounded border" data-color="emerald">Зелёный</button>
+                    <button class="px-2 py-1 text-xs rounded border" data-color="rose">Розовый</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500">Размер шрифта:</span>
+                    <select id="quick-fontsize-mobile" class="border rounded px-2 py-1 text-sm">
+                        <option value="small">Мелкий</option>
+                        <option value="medium" selected>Обычный</option>
+                        <option value="large">Крупный</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Форма резюме -->
@@ -347,10 +507,7 @@
                                             <div class="flex items-center mb-1">
                                                 <label for="job-position" class="flex-grow truncate cursor-pointer block font-medium text-gray-600 text-sm">Желаемая должность</label>
                                                 <div class="flex items-center gap-2 ml-2">
-                                                    <div class="toggle-wrapper">
-                                                        <input id="use-as-headline" type="checkbox">
-                                                        <span class="checkbox round"></span>
-                                                    </div>
+                                                    <input id="use-as-headline" type="checkbox" class="cursor-pointer">
                                                     <label for="use-as-headline" class="cursor-pointer text-sm">Использовать как заголовок</label>
                                                 </div>
                                             </div>

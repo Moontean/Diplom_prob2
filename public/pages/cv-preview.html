@@ -28,6 +28,16 @@
     .tpl-european { --accent:#2f47a3; --bg:#ffffff; --muted:#7c88b0; --chip-bg:rgba(47,71,163,.08); --chip-bd:#c7cefb; }
     .tpl-europass { --accent:#1f3c88; --bg:#ffffff; --muted:#647099; --chip-bg:rgba(31,60,136,.08); --chip-bd:#cfd6ff; }
 
+    /* Быстрые цветовые схемы (поверх шаблона) */
+    .theme-blue { --accent:#2563eb; --chip-bg:rgba(37,99,235,.08); --chip-bd:#bfdbfe; }
+    .theme-emerald { --accent:#059669; --chip-bg:rgba(5,150,105,.08); --chip-bd:#a7f3d0; }
+    .theme-rose { --accent:#e11d48; --chip-bg:rgba(225,29,72,.08); --chip-bd:#fecdd3; }
+
+    /* Размер текста */
+    .font-small { font-size: 14px; }
+    .font-medium { font-size: 16px; }
+    .font-large { font-size: 18px; }
+
     .tpl-european .cv-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 2.25rem; }
     .tpl-european .cv-left { background: #f4f6ff; border-radius: 1.5rem; padding: 1.75rem; box-shadow: inset 0 0 0 1px rgba(99,102,241,.08); }
     .tpl-european .cv-header { margin-bottom: 0.5rem; padding-bottom: 0; }
@@ -90,7 +100,7 @@
       </div>
     </div>
 
-    <div id="cvRoot" class="cv-card shadow rounded-lg tpl-modern">
+    <div id="cvRoot" class="cv-card shadow rounded-lg tpl-modern theme-blue font-medium">
       <div class="cv-header p-4 -mx-4 -mt-4 mb-3 rounded">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -181,6 +191,14 @@
       });
     }
 
+    function applyQuickStyles(root, settings) {
+      const color = (settings && settings.colorScheme) || 'blue';
+      const size = (settings && settings.fontSize) || 'medium';
+      root.classList.remove('theme-blue','theme-emerald','theme-rose','font-small','font-medium','font-large');
+      root.classList.add(`theme-${color}`);
+      root.classList.add(`font-${size}`);
+    }
+
     function render(dataOverride) {
       if (!window.__cvPreviewListenerAttached) {
         window.addEventListener('message', (event) => {
@@ -203,6 +221,7 @@
 
       tplEl.textContent = template;
       applyTemplate(root, template);
+      applyQuickStyles(root, data.settings);
       const pinfo = data.personalInfo || {};
       const useAsHeadline = !!pinfo.useAsHeadline;
       let headline = '';
@@ -387,6 +406,22 @@
         applyBtn.classList.add('bg-green-50');
         setTimeout(() => applyBtn.classList.remove('bg-green-50'), 300);
       });
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    // PNG export bridge
+    window.addEventListener('message', async (event) => {
+      const msg = event.data;
+      if (!msg || msg.type !== 'export-png') return;
+      try {
+        const root = document.getElementById('cvRoot');
+        const canvas = await html2canvas(root, { backgroundColor: null, scale: 2 });
+        const dataUrl = canvas.toDataURL('image/png');
+        window.parent.postMessage({ type: 'export-png-result', dataUrl }, window.location.origin);
+      } catch (e) {
+        window.parent.postMessage({ type: 'export-png-result', dataUrl: null, error: e?.message }, window.location.origin);
+      }
     });
   </script>
 </body>

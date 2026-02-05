@@ -8,7 +8,17 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const fs = require('fs');
-const rateLimit = require('express-rate-limit');
+let rateLimit;
+try {
+  rateLimit = require('express-rate-limit');
+  // In case of ESM default export shape
+  if (rateLimit && typeof rateLimit !== 'function' && typeof rateLimit.default === 'function') {
+    rateLimit = rateLimit.default;
+  }
+} catch (err) {
+  console.warn('⚠️ express-rate-limit не доступен или не поддерживается. Использую noop-лимитер.', err.message);
+  rateLimit = () => (req, res, next) => next();
+}
 const connectDB = require('./config/database');
 const User = require('./models/User');
 const CV = require('./models/CV');
@@ -204,6 +214,34 @@ app.get('/api/db-status', (req, res) => {
     database: isDBConnected ? 'MongoDB' : 'In-Memory',
     timestamp: new Date().toISOString()
   });
+});
+
+// Примеры шаблонов (PDF/DOCX) из публичной папки
+app.get('/api/templates/examples', async (req, res) => {
+  try {
+    const dir = path.join(__dirname, 'public', 'cv_templates');
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const files = await Promise.all(entries
+      .filter(e => e.isFile())
+      .map(async e => {
+        const full = path.join(dir, e.name);
+        const stat = await fs.promises.stat(full);
+        const ext = e.name.toLowerCase().endsWith('.pdf') ? 'pdf' : (e.name.toLowerCase().endsWith('.docx') ? 'docx' : '');
+        if (!ext) return null;
+        const base = e.name.replace(/\.(pdf|docx)$/i, '');
+        const displayName = base.replace(/[-_]+/g, ' ').trim();
+        return {
+          fileName: e.name,
+          displayName,
+          ext,
+          size: stat.size,
+          url: `/cv_templates/${encodeURIComponent(e.name)}`
+        };
+      }));
+    res.json(files.filter(Boolean));
+  } catch (err) {
+    res.status(500).json({ message: 'Не удалось получить примеры шаблонов' });
+  }
 });
 
 // ===== Stripe Billing API =====

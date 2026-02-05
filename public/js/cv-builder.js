@@ -31,26 +31,15 @@ class CVBuilder {
         this.loadSavedData();
         this.setupAutoSave();
         this.setupCoverLetterUI();
+        this.setupDragAndDropSections();
+        this.setupQuickStyles();
+        this.setupHistoryControls();
+        this.setupSidebarUI();
     }
 
     attachEventListeners() {
-        // Кнопки добавления дополнительных полей в персональной информации
-        const addFieldButtons = document.querySelectorAll('.add-field-btn');
-        addFieldButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => this.addPersonalField(e.currentTarget.dataset.field));
-        });
-
-        // Кнопки добавления элементов в разделы
-        const addSectionButtons = document.querySelectorAll('.add-section-item');
-        addSectionButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => this.addSectionItem(e.currentTarget.dataset.section));
-        });
-
-        // Кнопки добавления новых разделов
-        const addSectionBtns = document.querySelectorAll('.add-section-btn');
-        addSectionBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => this.addNewSection(e.currentTarget.dataset.section));
-        });
+        // Примечание: прямые обработчики для .add-section-btn, .add-section-item, .add-field-btn
+        // убраны в пользу глобального делегирования (см. DOMContentLoaded handler внизу файла)
 
         // Живой предпросмотр: отслеживаем изменения формы и отправляем обновление в превью
         const formRoot = document.getElementById('cv-form');
@@ -113,6 +102,8 @@ class CVBuilder {
         
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', () => this.downloadDocx());
+        const downloadPngBtn = document.getElementById('download-png-btn');
+        if (downloadPngBtn) downloadPngBtn.addEventListener('click', () => this.requestPngExport());
         if (coverLetterBtn) coverLetterBtn.addEventListener('click', () => this.generateCoverLetter());
         if (previewBtn) previewBtn.addEventListener('click', () => this.showPreview());
         if (saveBtn) saveBtn.addEventListener('click', async () => {
@@ -258,23 +249,213 @@ class CVBuilder {
         document.addEventListener('input', (e) => {
             if (e.target.matches('input, textarea, select')) {
                 this.saveData();
+                this.pushHistoryDebounced();
             }
         });
+    }
 
-        // Делегирование для динамических кнопок (+ и добавление полей)
-        document.addEventListener('click', (e) => {
-            const addItemBtn = e.target.closest('.add-section-item');
-            if (addItemBtn) {
-                this.addSectionItem(addItemBtn.dataset.section);
-            }
-            const addFieldBtn = e.target.closest('.add-field-btn');
-            if (addFieldBtn) {
-                this.addPersonalField(addFieldBtn.dataset.field);
+    setupSidebarUI() {
+        const headers = document.querySelectorAll('#left-sidebar .sidebar-group-header');
+        headers.forEach((btn) => {
+            const targetSel = btn.getAttribute('data-collapse-target');
+            const target = targetSel ? document.querySelector(targetSel) : null;
+            if (!target) return;
+
+            const setState = (expanded) => {
+                btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                target.classList.toggle('hidden', !expanded);
+            };
+
+            // initialize expanded true unless explicitly false
+            setState(btn.getAttribute('aria-expanded') !== 'false');
+
+            const toggle = () => setState(btn.getAttribute('aria-expanded') === 'false');
+
+            btn.addEventListener('click', toggle);
+            btn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                }
+            });
+        });
+    }
+
+    setupCollapsibleSections() {
+        const sectionButtons = document.querySelectorAll('.collapsible-section button[type="button"]');
+        sectionButtons.forEach(btn => {
+            if (!btn.classList.contains('add-section-item') && !btn.classList.contains('add-field-btn')) {
+                btn.addEventListener('click', (e) => this.toggleSection(e));
             }
         });
+    }
 
-        // Сворачивание/разворачивание секций
-        this.setupCollapsibleSections();
+    // ---------- Drag & Drop секций ----------
+    setupDragAndDropSections() {
+        const container = document.getElementById('resume-sections');
+        if (!container) return;
+        let dragEl = null;
+        let placeholder = document.createElement('div');
+        placeholder.style.height = '8px';
+        placeholder.style.background = '#bfdbfe';
+        placeholder.style.borderRadius = '4px';
+        placeholder.style.margin = '4px 0';
+
+        const sections = () => Array.from(container.querySelectorAll('.draggable-section'));
+        const setDraggable = (el) => { el.setAttribute('draggable', 'true'); };
+        sections().forEach(setDraggable);
+
+        container.addEventListener('dragstart', (e) => {
+            const target = e.target.closest('.draggable-section');
+            if (!target) return;
+            dragEl = target;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'reorder');
+            setTimeout(() => { dragEl.classList.add('opacity-50'); }, 0);
+        });
+        container.addEventListener('dragover', (e) => {
+            if (!dragEl) return;
+            e.preventDefault();
+            const after = Array.from(container.children).find(child => {
+                if (child === placeholder) return false;
+                if (!child.classList.contains('draggable-section')) return false;
+                const rect = child.getBoundingClientRect();
+                return e.clientY < rect.top + rect.height / 2;
+            });
+            if (after) {
+                container.insertBefore(placeholder, after);
+            } else {
+                container.appendChild(placeholder);
+            }
+        });
+        container.addEventListener('drop', (e) => {
+            if (!dragEl) return;
+            e.preventDefault();
+            container.insertBefore(dragEl, placeholder);
+            this.saveData();
+            this.pushLivePreview();
+        });
+        container.addEventListener('dragend', () => {
+            if (dragEl) dragEl.classList.remove('opacity-50');
+            if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+            dragEl = null;
+        });
+        // Observe for newly added sections
+        const mo = new MutationObserver(() => sections().forEach(setDraggable));
+        mo.observe(container, { childList: true });
+    }
+
+    // ---------- Быстрые стили ----------
+    setupQuickStyles() {
+        const applyColor = (color) => {
+            this.userData.settings = this.userData.settings || {};
+            this.userData.settings.colorScheme = color;
+            this.saveData();
+            this.pushLivePreview();
+        };
+        const applyFont = (size) => {
+            this.userData.settings = this.userData.settings || {};
+            this.userData.settings.fontSize = size;
+            this.saveData();
+            this.pushLivePreview();
+        };
+        document.querySelectorAll('#quick-colors [data-color], #quick-colors-mobile [data-color]').forEach(btn => {
+            btn.addEventListener('click', () => applyColor(btn.dataset.color));
+        });
+        const fs = document.getElementById('quick-fontsize');
+        if (fs) fs.addEventListener('change', () => applyFont(fs.value));
+        const fsM = document.getElementById('quick-fontsize-mobile');
+        if (fsM) fsM.addEventListener('change', () => applyFont(fsM.value));
+    }
+
+    // ---------- История (Undo/Redo) ----------
+    setupHistoryControls() {
+        this.__history = [];
+        this.__future = [];
+        this.__historyTimer = null;
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        undoBtn?.addEventListener('click', () => this.undo());
+        redoBtn?.addEventListener('click', () => this.redo());
+        document.addEventListener('keydown', (e) => {
+            const cmd = (e.ctrlKey || e.metaKey) && !e.shiftKey;
+            if (cmd && e.key.toLowerCase() === 'z') { e.preventDefault(); this.undo(); }
+            if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+                e.preventDefault(); this.redo();
+            }
+        });
+        // initial snapshot
+        this.pushHistory();
+    }
+    snapshot() {
+        return JSON.stringify(this.userData);
+    }
+    restoreFromSnapshot(snap) {
+        try {
+            const data = JSON.parse(snap);
+            this.userData = data;
+            this.rebuildUIForUserData();
+            this.saveData();
+            this.pushLivePreview();
+        } catch (_) {}
+    }
+    pushHistory() {
+        try { this.__history.push(this.snapshot()); } catch (_) {}
+        this.__future = [];
+    }
+    pushHistoryDebounced() {
+        clearTimeout(this.__historyTimer);
+        this.__historyTimer = setTimeout(() => this.pushHistory(), 800);
+    }
+    undo() {
+        if (!this.__history || this.__history.length <= 1) return;
+        const current = this.__history.pop();
+        const prev = this.__history[this.__history.length - 1];
+        this.__future.push(current);
+        this.restoreFromSnapshot(prev);
+    }
+    redo() {
+        if (!this.__future || this.__future.length === 0) return;
+        const next = this.__future.pop();
+        this.__history.push(next);
+        this.restoreFromSnapshot(next);
+    }
+    rebuildUIForUserData() {
+        // Reset dynamic containers without nuking userData
+        ['employment','education','skills','languages'].forEach(section => {
+            const container = document.getElementById(`${section}-items`);
+            if (container) { container.innerHTML = ''; container.classList.add('hidden'); }
+            this.itemCounters[section] = 0;
+        });
+        // Remove extra sections blocks
+        document.querySelectorAll('#resume-sections .draggable-section').forEach((el, idx) => {
+            if (idx > 3) el.remove(); // keep the first 4 base sections
+        });
+        this.currentSections = new Set(['employment','education','skills','languages']);
+        // Repopulate
+        this.populateForm();
+    }
+
+    // ---------- Экспорт PNG через превью ----------
+    requestPngExport() {
+        const frame = document.getElementById('live-preview-frame');
+        if (!frame || !frame.contentWindow) {
+            alert('Предпросмотр недоступен');
+            return;
+        }
+        // Ensure latest data
+        this.saveData();
+        this.sendPreviewMessage(this.userData);
+        frame.contentWindow.postMessage({ type: 'export-png' }, window.location.origin);
+        window.addEventListener('message', (event) => {
+            const msg = event.data;
+            if (!msg || msg.type !== 'export-png-result') return;
+            const url = msg.dataUrl;
+            if (!url) return;
+            const a = document.createElement('a');
+            a.href = url; a.download = `${this.getDocumentTitle() || 'resume'}.png`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }, { once: true });
     }
 
     setupCollapsibleSections() {
@@ -430,6 +611,7 @@ class CVBuilder {
         
         fieldsContainer.insertAdjacentHTML('beforeend', fieldHtml);
         this.saveData();
+        this.pushHistory();
     }
 
     getPersonalFieldHTML(fieldType) {
@@ -1310,7 +1492,11 @@ class CVBuilder {
 
 // Инициализация CV Builder при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
-    new CVBuilder();
+    try {
+        window.__cvBuilderInstance = new CVBuilder();
+    } catch (err) {
+        console.error('CVBuilder init failed:', err);
+    }
 
     // Обработчик удаления элементов
     document.addEventListener('click', (e) => {
@@ -1345,6 +1531,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const section = e.target.closest('.draggable-section');
             if (section) {
                 section.remove();
+                try { window.__cvBuilderInstance?.pushHistory(); } catch(_){}
                 // Показать кнопку добавления секции снова
                 const button = document.querySelector(`[data-section="${sectionType}"]`);
                 if (button && button.textContent.trim() !== '+') {
@@ -1352,5 +1539,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
+
+        // Глобальное делегирование кликов для устойчивости
+        const addSectionBtn = e.target.closest('.add-section-btn');
+        if (addSectionBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            try { 
+                window.__cvBuilderInstance?.addNewSection(addSectionBtn.dataset.section); 
+            } catch(err) {
+                console.error('Error adding section:', err);
+            }
+        }
+        const addItemBtn = e.target.closest('.add-section-item');
+        if (addItemBtn) {
+            e.preventDefault();
+            try { 
+                window.__cvBuilderInstance?.addSectionItem(addItemBtn.dataset.section); 
+            } catch(err) {
+                console.error('Error adding item:', err);
+            }
+        }
+        const addFieldBtn = e.target.closest('.add-field-btn');
+        if (addFieldBtn) {
+            e.preventDefault();
+            try { 
+                window.__cvBuilderInstance?.addPersonalField(addFieldBtn.dataset.field); 
+            } catch(err) {
+                console.error('Error adding field:', err);
+            }
+        }
+        const templateBtn = e.target.closest('.template-option');
+        if (templateBtn) {
+            try { 
+                window.__cvBuilderInstance?.selectTemplate(templateBtn.dataset.template); 
+            } catch(err) {
+                console.error('Error selecting template:', err);
+            }
+        }
+        const photoBtn = e.target.closest('#photo-upload');
+        if (photoBtn) {
+            const input = document.getElementById('photo-input');
+            if (input) input.click();
+        }
     });
+
+    // Глобальная обработка изменения фото
+    const photoInput = document.getElementById('photo-input');
+    if (photoInput) {
+        photoInput.addEventListener('change', (e) => {
+            try { window.__cvBuilderInstance?.handlePhotoUpload(e); } catch(_){}
+        });
+    }
 });

@@ -1,37 +1,61 @@
 // services/llm.js
 require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const Groq = require('groq-sdk');
 const { z } = require('zod');
+
+// Lazy imports to avoid ESM/CommonJS startup crashes
+let GoogleGenerativeAI = null;
+let Groq = null;
 
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
 const OAI_BASE_URL = process.env.OPENAI_BASE_URL || process.env.OAI_BASE_URL || 'http://127.0.0.1:1234/v1';
 const OAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OAI_API_KEY || '';
 const OAI_MODEL = process.env.OPENAI_MODEL || process.env.OAI_MODEL || 'llm openai/gpt-oss-20b';
 
-// Инициализация клиентов под выбранного провайдера
+// Инициализация клиентов под выбранного провайдера (ленивая)
 let geminiModel = null;
 let groqClient = null;
 
-try {
-  if (AI_PROVIDER === 'gemini') {
+async function ensureGemini() {
+  if (geminiModel) return true;
+  try {
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) {
       console.warn('⚠️ GEMINI_API_KEY отсутствует в .env.');
-    } else {
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      return false;
     }
-  } else if (AI_PROVIDER === 'groq') {
+    if (!GoogleGenerativeAI) {
+      // Dynamic ESM import to work under CommonJS
+      const mod = await import('@google/generative-ai');
+      GoogleGenerativeAI = mod.GoogleGenerativeAI;
+    }
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    return true;
+  } catch (err) {
+    console.warn('⚠️ Не удалось инициализировать Gemini:', err.message);
+    return false;
+  }
+}
+
+async function ensureGroq() {
+  if (groqClient) return true;
+  try {
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) {
       console.warn('⚠️ GROQ_API_KEY отсутствует в .env.');
-    } else {
-      groqClient = new Groq({ apiKey: groqKey });
+      return false;
     }
+    if (!Groq) {
+      // Dynamic ESM/CommonJS import
+      const mod = await import('groq-sdk');
+      Groq = mod.default || mod.Groq || mod;
+    }
+    groqClient = new Groq({ apiKey: groqKey });
+    return true;
+  } catch (err) {
+    console.warn('⚠️ Не удалось инициализировать Groq:', err.message);
+    return false;
   }
-} catch (err) {
-  console.warn('⚠️ Не удалось инициализировать AI провайдера:', err.message);
 }
 
 // ===== Схемы валидации =====
@@ -88,13 +112,19 @@ async function callLLM(prompt) {
   }
 
   if (provider === 'gemini') {
-    if (!geminiModel) throw new Error('Gemini model is not initialized');
+    if (!geminiModel) {
+      const ok = await ensureGemini();
+      if (!ok) throw new Error('Gemini model is not initialized');
+    }
     const response = await geminiModel.generateContent(prompt);
     const text = response?.response?.text?.() || response?.text?.();
     return text || '';
   }
   if (provider === 'groq') {
-    if (!groqClient) throw new Error('Groq client is not initialized');
+    if (!groqClient) {
+      const ok = await ensureGroq();
+      if (!ok) throw new Error('Groq client is not initialized');
+    }
     const completion = await groqClient.chat.completions.create({
       model: 'llama-3.1-70b-versatile',
       messages: [
