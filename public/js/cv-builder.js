@@ -21,12 +21,18 @@ class CVBuilder {
         };
         this.coverLetterUI = null;
         this.previewTimer = null;
+        // Маппинг DOCX-шаблонов для экспорта
+        this.docxTemplateMap = {
+            'experienced': '/cv_templates/free-experienced-template-resume.docx',
+            'entry-level': '/cv_templates/free-resume-example-entry-level.docx'
+        };
         
         this.init();
     }
 
     init() { // посмотреть гайды
         this.attachEventListeners();
+        this.setupPreviewStatusWatcher();
         this.applyTemplateFromQuery();
         this.loadExistingCVById();
         this.loadSavedData();
@@ -37,6 +43,7 @@ class CVBuilder {
         this.setupHistoryControls();
         this.setupSidebarUI();
         this.loadTemplateFromQuery(); // Загрузить выбранный шаблон из URL (в конце, когда DOM готов)
+        this.updateTemplateLabel();
     }
 
     attachEventListeners() {
@@ -1081,12 +1088,11 @@ class CVBuilder {
     }
 
     showPreview() {
-        // Сохранение данных перед предварительным просмотром
+        // Сохранение данных и принудительное включение панели превью справа
         this.saveData();
-        
-        // Не передаём большие данные в URL (предотвращаем HTTP 431)
-        // Данные уже сохранены в localStorage и будут прочитаны страницей превью
-        window.open('/pages/cv-preview', '_blank');
+        document.body.classList.toggle('force-preview');
+        // Отправить актуальные данные в iframe
+        this.pushLivePreview();
     }
 
     applyTemplateFromQuery() {
@@ -1124,6 +1130,27 @@ class CVBuilder {
                 this.selectedDocxTemplate = templateMap[template];
                 console.log('Загружен шаблон:', template, '→', this.selectedDocxTemplate);
                 
+                // Отобразить соответствующий визуальный шаблон в превью
+                const visualMap = {
+                    'experienced': 'classic',
+                    'entry-level': 'minimal',
+                    'custom': 'modern'
+                };
+                const visualTpl = visualMap[template] || 'modern';
+                this.userData.template = visualTpl;
+                // Подсветить выбор, если есть кнопки вариантов
+                document.querySelectorAll('.template-option').forEach(btn => {
+                    if (btn.dataset.template === visualTpl) {
+                        btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                    } else {
+                        btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                    }
+                });
+                // Обновить превью сразу
+                this.ensurePreviewVisible();
+                this.pushLivePreview();
+                this.updateTemplateLabel();
+
                 // Показать уведомление пользователю
                 const notification = document.createElement('div');
                 notification.className = 'fixed top-20 right-4 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
@@ -1132,7 +1159,7 @@ class CVBuilder {
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5">
                             <path fill="currentColor" d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/>
                         </svg>
-                        <span>Шаблон выбран! Заполните данные для создания резюме.</span>
+                        <span>Шаблон выбран! Заполните данные — превью справа обновляется автоматически.</span>
                     </div>
                 `;
                 document.body.appendChild(notification);
@@ -1140,6 +1167,10 @@ class CVBuilder {
             } else if (template === 'custom') {
                 this.selectedDocxTemplate = null;
                 console.log('Режим создания с нуля');
+                this.userData.template = 'modern';
+                this.ensurePreviewVisible();
+                this.pushLivePreview();
+                this.updateTemplateLabel();
             }
         } catch (err) {
             console.error('Ошибка загрузки шаблона:', err);
@@ -1258,6 +1289,26 @@ class CVBuilder {
             const targetOrigin = window.location.origin || '*';
             frame.contentWindow.postMessage({ type: 'cv-data', payload: data }, targetOrigin);
         }
+    }
+
+    setupPreviewStatusWatcher() {
+        const panel = document.getElementById('live-preview-panel');
+        if (!panel) return;
+        let ready = false;
+        const warn = () => {
+            if (ready) return;
+            const bar = document.createElement('div');
+            bar.className = 'px-4 py-2 text-xs text-amber-700 bg-amber-50 border-t border-amber-200';
+            bar.textContent = 'Предпросмотр не загрузился. Проверьте авторизацию и запуск сервера.';
+            panel.insertBefore(bar, panel.firstChild);
+        };
+        const timer = setTimeout(warn, 2500);
+        window.addEventListener('message', (e) => {
+            if (e?.data?.type === 'cv-ready') {
+                ready = true;
+                clearTimeout(timer);
+            }
+        });
     }
 
     async saveData({ immediate = false } = {}) {
@@ -1479,8 +1530,54 @@ class CVBuilder {
                 btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
             }
         });
+        this.updateTemplateLabel();
+        // Синхронизировать базовый DOCX для экспорта
+        const docxVisualMap = {
+            'classic': 'experienced',
+            'minimal': 'entry-level',
+            'modern': null,
+            'creative': null,
+            'european': null,
+            'europass': null
+        };
+        const docxId = docxVisualMap[templateName];
+        this.selectedDocxTemplate = docxId ? this.docxTemplateMap[docxId] : null;
+        try {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm text-gray-700 z-50';
+            toast.textContent = this.selectedDocxTemplate ? 'Экспорт DOCX: базовый шаблон выбран автоматически' : 'Экспорт DOCX: создание с нуля';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        } catch (_) {}
         this.saveData(); // только локально; сервер — по кнопке
+        this.ensurePreviewVisible();
         this.pushLivePreview();
+    }
+
+    updateTemplateLabel() {
+        const el = document.getElementById('current-template-label');
+        if (!el) return;
+        const map = {
+            modern: 'Современный',
+            classic: 'Классический',
+            minimal: 'Минималистичный',
+            creative: 'Креативный',
+            european: 'Европейский',
+            europass: 'Europass'
+        };
+        const name = map[this.userData?.template] || 'Современный';
+        el.textContent = name;
+    }
+
+    ensurePreviewVisible() {
+        try {
+            document.body.classList.add('force-preview');
+            const frame = document.getElementById('live-preview-frame');
+            if (frame && frame.contentWindow) {
+                // Небольшая задержка для показа панели перед отправкой
+                setTimeout(() => this.sendPreviewMessage(this.userData), 50);
+            }
+        } catch (_) {}
     }
 
     clearAllFields() {

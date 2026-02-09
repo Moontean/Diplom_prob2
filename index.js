@@ -1456,7 +1456,25 @@ app.post('/api/cv/download-docx', requireAuth, requirePremium, validateCv, async
       addParagraph(String(content));
     }
 
-    const doc = new Document({ sections: [{ children }] });
+    // Apply basic DOCX style based on selected template (experienced/entry-level)
+    const selectedTemplate = (req.body && req.body.selectedTemplate) || '';
+    let variant = null;
+    if (typeof selectedTemplate === 'string') {
+      if (selectedTemplate.includes('experienced')) variant = 'classic';
+      else if (selectedTemplate.includes('entry-level')) variant = 'minimal';
+    }
+    const fontName = variant === 'classic' ? 'Times New Roman' : 'Calibri';
+
+    const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: { font: fontName }
+          }
+        }
+      },
+      sections: [{ children }]
+    });
     const filename = `${(cv.title || 'resume').replace(/[^\w\-]+/g, '_')}.docx`;
     const buffer = await Packer.toBuffer(doc);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');

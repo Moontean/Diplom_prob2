@@ -4,36 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CV Builder — Создание резюме</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'brand': {
-                            50: '#eff6ff',
-                            100: '#dbeafe',
-                            200: '#bfdbfe',
-                            300: '#93c5fd',
-                            400: '#60a5fa',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            700: '#1d4ed8',
-                            800: '#1e40af',
-                            900: '#1e3a8a'
-                        },
-                        'background': '#f8fafc'
-                    },
-                    fontFamily: {
-                        'sans': ['Inter', 'system-ui', 'sans-serif']
-                    },
-                    borderRadius: {
-                        'brand': '0.5rem'
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="/css/tailwind.css">
+    <!-- Tailwind is now compiled locally; runtime config script removed. -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     <style>
@@ -58,6 +30,19 @@
     </style>
 </head>
 <body class="bg-background font-sans">
+        <script>
+            // Временное решение: принудительно подключаем Tailwind CDN,
+            // чтобы исключить «голую» страницу у пользователя.
+            (function(){
+                if (!document.getElementById('tw-cdn-fallback')) {
+                    const s = document.createElement('script');
+                    s.id = 'tw-cdn-fallback';
+                    s.src = 'https://cdn.tailwindcss.com';
+                    document.head.appendChild(s);
+                    console.warn('Tailwind CSS: принудительно загружен CDN');
+                }
+            })();
+        </script>
 
     <style>
         /* Панель превью справа (desktop) */
@@ -82,6 +67,9 @@
             z-index: 10;
             display: none;
         }
+        /* Force preview panel visible regardless of viewport width */
+        .force-preview #live-preview-panel { display: block !important; }
+        .force-preview #builder-wrapper { right: 42vw !important; }
         #live-preview-frame {
             width: 100%;
             height: 100%;
@@ -400,6 +388,7 @@
                     </div>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Выберите стиль оформления: сохранится вместе с резюме и применится в предварительном просмотре и экспорте.</p>
+                <div class="mt-2 text-xs text-gray-500">Текущий шаблон: <span id="current-template-label" class="font-medium text-gray-800">Современный</span></div>
             </div>
             <!-- Быстрые стили (дублируем для мобильных) -->
             <div class="lg:hidden mb-3">
