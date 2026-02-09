@@ -26,7 +26,7 @@ class CVBuilder {
             'experienced': '/cv_templates/free-experienced-template-resume.docx',
             'entry-level': '/cv_templates/free-resume-example-entry-level.docx'
         };
-        
+
         this.init();
     }
 
@@ -75,7 +75,7 @@ class CVBuilder {
                 try {
                     this.userData.personalInfo = this.userData.personalInfo || {};
                     this.userData.personalInfo.useAsHeadline = !!useAsHeadline.checked;
-                } catch (_) {}
+                } catch (_) { }
                 this.pushLivePreview();
             });
         }
@@ -89,7 +89,7 @@ class CVBuilder {
         // Загрузка фото
         const photoButton = document.getElementById('photo-upload');
         const photoInput = document.getElementById('photo-input');
-        
+
         if (photoButton && photoInput) {
             photoButton.addEventListener('click', () => photoInput.click());
             photoInput.addEventListener('change', (e) => this.handlePhotoUpload(e));
@@ -108,7 +108,7 @@ class CVBuilder {
         const saveFromOptionsBtn = document.getElementById('save-from-options-btn');
         const clearFormBtn = document.getElementById('clear-form-btn');
         const addTestResultsBtn = document.getElementById('add-test-results-btn');
-        
+
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', () => this.downloadDocx());
         const downloadPngBtn = document.getElementById('download-png-btn');
@@ -182,7 +182,7 @@ class CVBuilder {
                                     breakdown: saved.breakdown
                                 };
                             }
-                        } catch (_) {}
+                        } catch (_) { }
                     }
 
                     if (!payload || typeof payload.score !== 'number') {
@@ -406,10 +406,10 @@ class CVBuilder {
             this.rebuildUIForUserData();
             this.saveData();
             this.pushLivePreview();
-        } catch (_) {}
+        } catch (_) { }
     }
     pushHistory() {
-        try { this.__history.push(this.snapshot()); } catch (_) {}
+        try { this.__history.push(this.snapshot()); } catch (_) { }
         this.__future = [];
     }
     pushHistoryDebounced() {
@@ -431,7 +431,7 @@ class CVBuilder {
     }
     rebuildUIForUserData() {
         // Reset dynamic containers without nuking userData
-        ['employment','education','skills','languages'].forEach(section => {
+        ['employment', 'education', 'skills', 'languages'].forEach(section => {
             const container = document.getElementById(`${section}-items`);
             if (container) { container.innerHTML = ''; container.classList.add('hidden'); }
             this.itemCounters[section] = 0;
@@ -440,7 +440,7 @@ class CVBuilder {
         document.querySelectorAll('#resume-sections .draggable-section').forEach((el, idx) => {
             if (idx > 3) el.remove(); // keep the first 4 base sections
         });
-        this.currentSections = new Set(['employment','education','skills','languages']);
+        this.currentSections = new Set(['employment', 'education', 'skills', 'languages']);
         // Repopulate
         this.populateForm();
     }
@@ -570,9 +570,9 @@ class CVBuilder {
                     additionalSections: cv.additionalSections || {},
                     template: cv.template || 'modern',
                     settings: {
-                        fontSize:'medium',
-                        colorScheme:'blue',
-                        includePhoto:true,
+                        fontSize: 'medium',
+                        colorScheme: 'blue',
+                        includePhoto: true,
                         ...(cv.settings || {})
                     }
                 };
@@ -589,7 +589,7 @@ class CVBuilder {
         const section = button.closest('.collapsible-section');
         const content = section.querySelector('.w-full:not(.flex)');
         const arrow = button.querySelector('svg path');
-        
+
         if (content) {
             if (content.classList.contains('hidden')) {
                 content.classList.remove('hidden');
@@ -610,14 +610,14 @@ class CVBuilder {
     addPersonalField(fieldType) {
         const container = document.querySelector('.flex-wrap.pt-5.pb-3.gap-2');
         const button = container.querySelector(`[data-field="${fieldType}"]`);
-        
+
         if (button) {
             button.style.display = 'none';
         }
 
         const fieldsContainer = document.querySelector('.flex-grow.max-w-full');
         const fieldHtml = this.getPersonalFieldHTML(fieldType);
-        
+
         fieldsContainer.insertAdjacentHTML('beforeend', fieldHtml);
         this.saveData();
         this.pushHistory();
@@ -862,10 +862,10 @@ class CVBuilder {
 
         const sectionsContainer = document.getElementById('resume-sections');
         const sectionHtml = this.getNewSectionHTML(sectionType);
-        
+
         sectionsContainer.insertAdjacentHTML('beforeend', sectionHtml);
         this.currentSections.add(sectionType);
-        
+
         // Скрыть кнопку добавления этой секции
         const addBtn = document.querySelector(`[data-section="${sectionType}"]`);
         if (addBtn && addBtn.textContent.trim() !== '+') {
@@ -985,7 +985,7 @@ class CVBuilder {
         // Проверка формата файла
         const allowedTypes = ['.pdf', '.doc', '.docx'];
         const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-        
+
         if (!allowedTypes.includes(fileExtension)) {
             alert('Поддерживаются только файлы PDF, DOC и DOCX');
             return;
@@ -1003,7 +1003,7 @@ class CVBuilder {
     downloadCV() {
         // Сохранение данных перед скачиванием
         this.saveData();
-        
+
         // Отправка данных на сервер для генерации PDF
         fetch('/api/cv/download', {
             method: 'POST',
@@ -1012,45 +1012,45 @@ class CVBuilder {
             },
             body: JSON.stringify(this.userData)
         })
-        .then(async (response) => {
-            const ct = response.headers.get('content-type') || '';
-            if (response.ok && ct.includes('application/pdf')) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${this.getDocumentTitle() || 'resume'}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                return;
-            }
-            // сервер пока возвращает JSON-заглушку
-            const data = await response.json().catch(() => ({ success:false }));
-            if (response.status === 401) {
-                this.redirectToAuthRequired();
-                return;
-            }
-            const msg = data?.message || 'Ошибка при генерации PDF';
-            throw new Error(msg);
-        })
-        .catch(error => {
-            console.error('Ошибка:', error);
-            alert(`Не удалось скачать резюме: ${error.message || 'неизвестная ошибка'}`);
-        });
+            .then(async (response) => {
+                const ct = response.headers.get('content-type') || '';
+                if (response.ok && ct.includes('application/pdf')) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${this.getDocumentTitle() || 'resume'}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    return;
+                }
+                // сервер пока возвращает JSON-заглушку
+                const data = await response.json().catch(() => ({ success: false }));
+                if (response.status === 401) {
+                    this.redirectToAuthRequired();
+                    return;
+                }
+                const msg = data?.message || 'Ошибка при генерации PDF';
+                throw new Error(msg);
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                alert(`Не удалось скачать резюме: ${error.message || 'неизвестная ошибка'}`);
+            });
     }
 
     downloadDocx() {
         this.saveData();
-        
+
         // Проверяем, выбран ли шаблон
         if (!this.selectedDocxTemplate) {
             alert('Пожалуйста, выберите шаблон резюме на странице создания.');
             window.location.href = '/pages/template-selection';
             return;
         }
-        
+
         fetch('/api/cv/download-docx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1059,32 +1059,32 @@ class CVBuilder {
                 selectedTemplate: this.selectedDocxTemplate
             })
         })
-        .then(async (response) => {
-            const ct = response.headers.get('content-type') || '';
-            if (response.ok && ct.includes('officedocument.wordprocessingml.document')) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${this.getDocumentTitle() || 'resume'}.docx`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                return;
-            }
-            const data = await response.json().catch(() => ({ success:false }));
-            if (response.status === 401) {
-                this.redirectToAuthRequired();
-                return;
-            }
-            const msg = data?.message || 'Ошибка при генерации DOCX';
-            throw new Error(msg);
-        })
-        .catch(error => {
-            console.error('Ошибка DOCX:', error);
-            alert(`Не удалось скачать DOCX: ${error.message || 'неизвестная ошибка'}`);
-        });
+            .then(async (response) => {
+                const ct = response.headers.get('content-type') || '';
+                if (response.ok && ct.includes('officedocument.wordprocessingml.document')) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${this.getDocumentTitle() || 'resume'}.docx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    return;
+                }
+                const data = await response.json().catch(() => ({ success: false }));
+                if (response.status === 401) {
+                    this.redirectToAuthRequired();
+                    return;
+                }
+                const msg = data?.message || 'Ошибка при генерации DOCX';
+                throw new Error(msg);
+            })
+            .catch(error => {
+                console.error('Ошибка DOCX:', error);
+                alert(`Не удалось скачать DOCX: ${error.message || 'неизвестная ошибка'}`);
+            });
     }
 
     showPreview() {
@@ -1099,37 +1099,74 @@ class CVBuilder {
         try {
             const url = new URL(window.location.href);
             const tpl = url.searchParams.get('template');
-            const allowed = new Set(['modern','classic','minimal','creative','european','europass']);
+            const allowed = new Set(['modern', 'classic', 'minimal', 'creative', 'european', 'europass']);
             if (tpl && allowed.has(tpl)) {
                 this.userData.template = tpl;
                 // визуально отметить
                 document.querySelectorAll('.template-option').forEach(btn => {
                     if (btn.dataset.template === tpl) {
-                        btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                        btn.classList.add('ring-2', 'ring-brand-400', 'border-brand-400');
                     } else {
-                        btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                        btn.classList.remove('ring-2', 'ring-brand-400', 'border-brand-400');
                     }
                 });
+                this.setPreviewSrc(tpl);
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     loadTemplateFromQuery() {
         try {
             const url = new URL(window.location.href);
             const template = url.searchParams.get('template');
-            
+            const exampleUrl = url.searchParams.get('example');
+
+            // Если пришёл пример из папки cv_templates, показываем его справа
+            if (exampleUrl) {
+                const decoded = decodeURIComponent(exampleUrl);
+                this.ensurePreviewVisible();
+                this.setPreviewToUrl(decoded);
+                // Если одновременно передан визуальный шаблон — отметим выбор в UI,
+                // но превью оставим на файле примера
+                const visualSet = new Set(['modern', 'classic', 'minimal', 'creative', 'european', 'europass']);
+                if (template && visualSet.has(template)) {
+                    this.selectTemplate(template);
+                    this.updateTemplateLabel();
+                }
+                return;
+            }
+            // Если передан визуальный шаблон из страницы выбора — применяем его напрямую
+            const visualSet = new Set(['modern', 'classic', 'minimal', 'creative', 'european', 'europass']);
+            if (template && visualSet.has(template)) {
+                // Приоритет выбранного на странице шаблонов над локально сохранённым
+                this.selectTemplate(template);
+                this.ensurePreviewVisible();
+                this.updateTemplateLabel();
+                this.showTemplateToast(template);
+                // Для известных примеров показываем реальный файл из cv_templates справа
+                const pdfMap = {
+                    classic: '/cv_templates/free-experienced-template-resume.pdf',
+                    minimal: '/cv_templates/free-resume-example-entry-level.pdf'
+                };
+                if (pdfMap[template]) {
+                    this.setPreviewToUrl(pdfMap[template]);
+                } else {
+                    this.setPreviewSrc(template);
+                }
+                return;
+            }
+
             // Маппинг шаблонов на файлы DOCX
             const templateMap = {
                 'experienced': '/cv_templates/free-experienced-template-resume.docx',
                 'entry-level': '/cv_templates/free-resume-example-entry-level.docx',
                 'custom': null // Создание с нуля - используем обычный конструктор
             };
-            
+
             if (template && templateMap[template]) {
                 this.selectedDocxTemplate = templateMap[template];
                 console.log('Загружен шаблон:', template, '→', this.selectedDocxTemplate);
-                
+
                 // Отобразить соответствующий визуальный шаблон в превью
                 const visualMap = {
                     'experienced': 'classic',
@@ -1141,9 +1178,9 @@ class CVBuilder {
                 // Подсветить выбор, если есть кнопки вариантов
                 document.querySelectorAll('.template-option').forEach(btn => {
                     if (btn.dataset.template === visualTpl) {
-                        btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                        btn.classList.add('ring-2', 'ring-brand-400', 'border-brand-400');
                     } else {
-                        btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                        btn.classList.remove('ring-2', 'ring-brand-400', 'border-brand-400');
                     }
                 });
                 // Обновить превью сразу
@@ -1151,19 +1188,18 @@ class CVBuilder {
                 this.pushLivePreview();
                 this.updateTemplateLabel();
 
-                // Показать уведомление пользователю
-                const notification = document.createElement('div');
-                notification.className = 'fixed top-20 right-4 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-                notification.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5">
-                            <path fill="currentColor" d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/>
-                        </svg>
-                        <span>Шаблон выбран! Заполните данные — превью справа обновляется автоматически.</span>
-                    </div>
-                `;
-                document.body.appendChild(notification);
-                setTimeout(() => notification.remove(), 5000);
+                // Яркое уведомление пользователю
+                this.showTemplateToast(visualTpl, { docxId: template });
+                // Для соответствующих DOCX-примеров показываем PDF-вариант справа
+                const docxToPdf = {
+                    'experienced': '/cv_templates/free-experienced-template-resume.pdf',
+                    'entry-level': '/cv_templates/free-resume-example-entry-level.pdf'
+                };
+                if (docxToPdf[template]) {
+                    this.setPreviewToUrl(docxToPdf[template]);
+                } else {
+                    this.setPreviewSrc(visualTpl);
+                }
             } else if (template === 'custom') {
                 this.selectedDocxTemplate = null;
                 console.log('Режим создания с нуля');
@@ -1171,10 +1207,54 @@ class CVBuilder {
                 this.ensurePreviewVisible();
                 this.pushLivePreview();
                 this.updateTemplateLabel();
+                this.showTemplateToast('modern');
+                this.setPreviewSrc('modern');
             }
         } catch (err) {
             console.error('Ошибка загрузки шаблона:', err);
         }
+    }
+
+    // Яркий тост «Шаблон применён» с названием шаблона и автоскрытием
+    showTemplateToast(templateKey, opts = {}) {
+        try {
+            const nameMap = {
+                modern: 'Современный',
+                classic: 'Классический',
+                minimal: 'Минималистичный',
+                creative: 'Креативный',
+                european: 'Европейский',
+                europass: 'Europass'
+            };
+            const docxMap = { 'experienced': 'Experienced', 'entry-level': 'Entry-level' };
+            const label = nameMap[templateKey] || 'Шаблон';
+            const docxNote = opts.docxId && docxMap[opts.docxId] ? ` · DOCX: ${docxMap[opts.docxId]}` : '';
+
+            const toast = document.createElement('div');
+            toast.className = 'fixed top-6 right-6 z-50 w-[380px] max-w-[90vw] bg-white border border-blue-200 shadow-xl rounded-xl overflow-hidden';
+            toast.innerHTML = `
+              <div class="h-1 w-full bg-gradient-to-r from-blue-500 via-sky-400 to-cyan-400"></div>
+              <div class="p-4 flex items-start gap-3">
+                <div class="shrink-0 rounded-md bg-blue-50 text-blue-600 p-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="M10.6 13.8L8.2 11.4l-1.4 1.4l3.8 3.8l7.8-7.8l-1.4-1.4z"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="font-semibold text-gray-900">Шаблон применён: ${label}${docxNote}</div>
+                  <div class="text-sm text-gray-600 mt-0.5">Предпросмотр справа открыт и обновляется автоматически при вводе.</div>
+                </div>
+                <button type="button" class="text-gray-400 hover:text-gray-600" aria-label="Закрыть" data-close-toast>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5"><path fill="currentColor" d="m12 13.4l-4.9 4.9l-1.4-1.4L10.6 12L5.7 7.1l1.4-1.4L12 10.6l4.9-4.9l1.4 1.4L13.4 12l4.9 4.9l-1.4 1.4z"/></svg>
+                </button>
+              </div>`;
+
+            document.body.appendChild(toast);
+            const close = () => {
+                toast.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => toast.remove(), 320);
+            };
+            toast.querySelector('[data-close-toast]')?.addEventListener('click', close);
+            setTimeout(close, 4800);
+        } catch (_) { }
     }
 
     getDocumentTitle() {
@@ -1206,8 +1286,8 @@ class CVBuilder {
 
         // Сбор персональных данных
         const personalFields = [
-            'given-name', 'family-name', 'job-position', 'email', 
-            'phone', 'address', 'postal-code', 'city', 'birthdate', 
+            'given-name', 'family-name', 'job-position', 'email',
+            'phone', 'address', 'postal-code', 'city', 'birthdate',
             'website', 'linkedin'
         ];
 
@@ -1279,7 +1359,7 @@ class CVBuilder {
         this.userData = data;
         try {
             localStorage.setItem('cvBuilderData', JSON.stringify(data));
-        } catch (_) {}
+        } catch (_) { }
         this.sendPreviewMessage(data);
     }
 
@@ -1295,18 +1375,31 @@ class CVBuilder {
         const panel = document.getElementById('live-preview-panel');
         if (!panel) return;
         let ready = false;
+        let barEl = null;
         const warn = () => {
             if (ready) return;
-            const bar = document.createElement('div');
-            bar.className = 'px-4 py-2 text-xs text-amber-700 bg-amber-50 border-t border-amber-200';
-            bar.textContent = 'Предпросмотр не загрузился. Проверьте авторизацию и запуск сервера.';
-            panel.insertBefore(bar, panel.firstChild);
+            barEl = document.createElement('div');
+            barEl.className = 'flex items-center justify-between gap-3 px-3 py-2 text-xs text-amber-800 bg-amber-50 border-b border-amber-200';
+            const next = encodeURIComponent('/pages/cv-builder' + window.location.search);
+            barEl.innerHTML = `
+                <span>Предпросмотр не загрузился. Возможно, требуется вход или сервер не запущен.</span>
+                <span class="flex items-center gap-2">
+                  <a href="/pages/login?next=${next}" class="inline-flex items-center px-2 py-1 rounded border border-amber-300 text-amber-800 bg-white hover:bg-amber-100">Войти</a>
+                  <button type="button" id="reload-preview-btn" class="inline-flex items-center px-2 py-1 rounded border border-amber-300 text-amber-800 bg-white hover:bg-amber-100">Перезагрузить</button>
+                </span>`;
+            panel.insertBefore(barEl, panel.firstChild);
+            const btn = barEl.querySelector('#reload-preview-btn');
+            btn?.addEventListener('click', () => {
+                const iframe = document.getElementById('live-preview-frame');
+                if (iframe) iframe.src = '/pages/cv-preview';
+            });
         };
         const timer = setTimeout(warn, 2500);
         window.addEventListener('message', (e) => {
             if (e?.data?.type === 'cv-ready') {
                 ready = true;
                 clearTimeout(timer);
+                if (barEl && barEl.parentNode) barEl.parentNode.removeChild(barEl);
             }
         });
     }
@@ -1481,15 +1574,15 @@ class CVBuilder {
             const current = this.userData.template;
             document.querySelectorAll('.template-option').forEach(btn => {
                 if (btn.dataset.template === current) {
-                    btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                    btn.classList.add('ring-2', 'ring-brand-400', 'border-brand-400');
                 } else {
-                    btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                    btn.classList.remove('ring-2', 'ring-brand-400', 'border-brand-400');
                 }
             });
         }
 
         // Восстановление текстовых дополнительных секций (textarea)
-        const extraSections = ['profile','projects','certificates','courses','internships','activities','references','qualities','achievements','signature','footer','assessment','custom'];
+        const extraSections = ['profile', 'projects', 'certificates', 'courses', 'internships', 'activities', 'references', 'qualities', 'achievements', 'signature', 'footer', 'assessment', 'custom'];
         extraSections.forEach(section => {
             const value = this.userData?.additionalSections?.[section];
             if (!value) return;
@@ -1525,9 +1618,9 @@ class CVBuilder {
         // Обновить визуальную подсветку выбранного шаблона
         document.querySelectorAll('.template-option').forEach(btn => {
             if (btn.dataset.template === templateName) {
-                btn.classList.add('ring-2','ring-brand-400','border-brand-400');
+                btn.classList.add('ring-2', 'ring-brand-400', 'border-brand-400');
             } else {
-                btn.classList.remove('ring-2','ring-brand-400','border-brand-400');
+                btn.classList.remove('ring-2', 'ring-brand-400', 'border-brand-400');
             }
         });
         this.updateTemplateLabel();
@@ -1548,7 +1641,7 @@ class CVBuilder {
             toast.textContent = this.selectedDocxTemplate ? 'Экспорт DOCX: базовый шаблон выбран автоматически' : 'Экспорт DOCX: создание с нуля';
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 2500);
-        } catch (_) {}
+        } catch (_) { }
         this.saveData(); // только локально; сервер — по кнопке
         this.ensurePreviewVisible();
         this.pushLivePreview();
@@ -1577,7 +1670,37 @@ class CVBuilder {
                 // Небольшая задержка для показа панели перед отправкой
                 setTimeout(() => this.sendPreviewMessage(this.userData), 50);
             }
-        } catch (_) {}
+        } catch (_) { }
+    }
+
+    // Устанавливает src iframe с выбранным шаблоном (fallback до postMessage)
+    setPreviewSrc(template) {
+        try {
+            const frame = document.getElementById('live-preview-frame');
+            if (!frame) return;
+            const base = '/pages/cv-preview';
+            const ts = Date.now();
+            frame.src = `${base}?template=${encodeURIComponent(template)}&ts=${ts}`;
+        } catch (_) { }
+    }
+
+    // Устанавливает превью на произвольный URL (пример из /cv_templates)
+    setPreviewToUrl(url) {
+        try {
+            const frame = document.getElementById('live-preview-frame');
+            if (!frame) return;
+            const isDocx = /\.docx(?:$|\?)/i.test(url);
+            const isPdf = /\.pdf(?:$|\?)/i.test(url);
+            if (isPdf) {
+                frame.src = url.startsWith('/') ? url : `/cv_templates/${url}`;
+            } else if (isDocx) {
+                // Для DOCX показываем информативную заглушку внутри cv-preview
+                const abs = url.startsWith('/') ? url : `/cv_templates/${url}`;
+                frame.src = `/pages/cv-preview?docx=${encodeURIComponent(abs)}`;
+            } else {
+                frame.src = url;
+            }
+        } catch (_) { }
     }
 
     clearAllFields() {
@@ -1598,7 +1721,7 @@ class CVBuilder {
         }
 
         // Удаление динамических элементов разделов
-        ['employment','education','skills','languages'].forEach(section => {
+        ['employment', 'education', 'skills', 'languages'].forEach(section => {
             const container = document.getElementById(`${section}-items`);
             if (container) {
                 container.innerHTML = '';
@@ -1608,7 +1731,7 @@ class CVBuilder {
         });
 
         // Очистка дополнительных секций (textarea)
-        ['profile','projects','certificates','courses','internships','activities','references','qualities','achievements','signature','footer','custom'].forEach(section => {
+        ['profile', 'projects', 'certificates', 'courses', 'internships', 'activities', 'references', 'qualities', 'achievements', 'signature', 'footer', 'custom'].forEach(section => {
             const container = document.getElementById(`${section}-items`);
             if (container) {
                 const textarea = container.querySelector('textarea');
@@ -1679,7 +1802,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const section = e.target.closest('.draggable-section');
             if (section) {
                 section.remove();
-                try { window.__cvBuilderInstance?.pushHistory(); } catch(_){}
+                try { window.__cvBuilderInstance?.pushHistory(); } catch (_) { }
                 // Показать кнопку добавления секции снова
                 const button = document.querySelector(`[data-section="${sectionType}"]`);
                 if (button && button.textContent.trim() !== '+') {
@@ -1693,35 +1816,35 @@ document.addEventListener('DOMContentLoaded', () => {
         if (addSectionBtn) {
             e.preventDefault();
             e.stopPropagation();
-            try { 
-                window.__cvBuilderInstance?.addNewSection(addSectionBtn.dataset.section); 
-            } catch(err) {
+            try {
+                window.__cvBuilderInstance?.addNewSection(addSectionBtn.dataset.section);
+            } catch (err) {
                 console.error('Error adding section:', err);
             }
         }
         const addItemBtn = e.target.closest('.add-section-item');
         if (addItemBtn) {
             e.preventDefault();
-            try { 
-                window.__cvBuilderInstance?.addSectionItem(addItemBtn.dataset.section); 
-            } catch(err) {
+            try {
+                window.__cvBuilderInstance?.addSectionItem(addItemBtn.dataset.section);
+            } catch (err) {
                 console.error('Error adding item:', err);
             }
         }
         const addFieldBtn = e.target.closest('.add-field-btn');
         if (addFieldBtn) {
             e.preventDefault();
-            try { 
-                window.__cvBuilderInstance?.addPersonalField(addFieldBtn.dataset.field); 
-            } catch(err) {
+            try {
+                window.__cvBuilderInstance?.addPersonalField(addFieldBtn.dataset.field);
+            } catch (err) {
                 console.error('Error adding field:', err);
             }
         }
         const templateBtn = e.target.closest('.template-option');
         if (templateBtn) {
-            try { 
-                window.__cvBuilderInstance?.selectTemplate(templateBtn.dataset.template); 
-            } catch(err) {
+            try {
+                window.__cvBuilderInstance?.selectTemplate(templateBtn.dataset.template);
+            } catch (err) {
                 console.error('Error selecting template:', err);
             }
         }
@@ -1736,7 +1859,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const photoInput = document.getElementById('photo-input');
     if (photoInput) {
         photoInput.addEventListener('change', (e) => {
-            try { window.__cvBuilderInstance?.handlePhotoUpload(e); } catch(_){}
+            try { window.__cvBuilderInstance?.handlePhotoUpload(e); } catch (_) { }
         });
     }
 });

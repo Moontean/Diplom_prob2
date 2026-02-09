@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,69 +8,314 @@
   <link rel="stylesheet" href="/css/tailwind.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: Inter, system-ui, sans-serif; }
-    .cv-card { background: var(--bg); border-radius: 1.5rem; padding: 2rem; }
-    .cv-card::selection { background: rgba(37,99,235,.15); }
-    .cv-body { display: flex; flex-direction: column; gap: 1.5rem; }
-    .cv-column { display: flex; flex-direction: column; gap: 1.25rem; }
-    .cv-left section, .cv-right section { padding: 0; border: none; }
-    .cv-title { font-size: 2rem; font-weight: 700; color: #0f172a; }
-    .cv-title-line { display: block; line-height: 1.1; }
-    .cv-header { background: var(--bg); }
-    .section-head { text-transform: none; letter-spacing: normal; }
-    .summary-text { font-size: 0.95rem; line-height: 1.6; color: #475569; }
-    .chip { display: inline-flex; align-items: center; justify-content: center; padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.85rem; margin-right: 0.4rem; margin-bottom: 0.4rem; background: var(--chip-bg); border: 1px solid var(--chip-bd); }
-    .cv-left, .cv-right { width: 100%; }
+    body {
+      font-family: Inter, system-ui, sans-serif;
+    }
 
-    .tpl-modern { --accent:#2563eb; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(37,99,235,.08); --chip-bd:#bfdbfe; }
-    .tpl-classic { --accent:#111827; --bg:#ffffff; --muted:#4b5563; --chip-bg:#f3f4f6; --chip-bd:#e5e7eb; }
-    .tpl-minimal { --accent:#374151; --bg:#ffffff; --muted:#9ca3af; --chip-bg:#ffffff; --chip-bd:#e5e7eb; }
-    .tpl-creative { --accent:#7c3aed; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(124,58,237,.08); --chip-bd:#c4b5fd; }
-    .tpl-european { --accent:#2f47a3; --bg:#ffffff; --muted:#7c88b0; --chip-bg:rgba(47,71,163,.08); --chip-bd:#c7cefb; }
-    .tpl-europass { --accent:#1f3c88; --bg:#ffffff; --muted:#647099; --chip-bg:rgba(31,60,136,.08); --chip-bd:#cfd6ff; }
+    .cv-card {
+      background: var(--bg);
+      border-radius: 1.5rem;
+      padding: 2rem;
+    }
+
+    .cv-card::selection {
+      background: rgba(37, 99, 235, .15);
+    }
+
+    .cv-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .cv-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .cv-left section,
+    .cv-right section {
+      padding: 0;
+      border: none;
+    }
+
+    .cv-title {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .cv-title-line {
+      display: block;
+      line-height: 1.1;
+    }
+
+    .cv-header {
+      background: var(--bg);
+    }
+
+    .section-head {
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .summary-text {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #475569;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      margin-right: 0.4rem;
+      margin-bottom: 0.4rem;
+      background: var(--chip-bg);
+      border: 1px solid var(--chip-bd);
+    }
+
+    .cv-left,
+    .cv-right {
+      width: 100%;
+    }
+
+    .tpl-modern {
+      --accent: #2563eb;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --chip-bg: rgba(37, 99, 235, .08);
+      --chip-bd: #bfdbfe;
+    }
+
+    .tpl-classic {
+      --accent: #111827;
+      --bg: #ffffff;
+      --muted: #4b5563;
+      --chip-bg: #f3f4f6;
+      --chip-bd: #e5e7eb;
+    }
+
+    .tpl-minimal {
+      --accent: #374151;
+      --bg: #ffffff;
+      --muted: #9ca3af;
+      --chip-bg: #ffffff;
+      --chip-bd: #e5e7eb;
+    }
+
+    .tpl-creative {
+      --accent: #7c3aed;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --chip-bg: rgba(124, 58, 237, .08);
+      --chip-bd: #c4b5fd;
+    }
+
+    .tpl-european {
+      --accent: #2f47a3;
+      --bg: #ffffff;
+      --muted: #7c88b0;
+      --chip-bg: rgba(47, 71, 163, .08);
+      --chip-bd: #c7cefb;
+    }
+
+    .tpl-europass {
+      --accent: #1f3c88;
+      --bg: #ffffff;
+      --muted: #647099;
+      --chip-bg: rgba(31, 60, 136, .08);
+      --chip-bd: #cfd6ff;
+    }
 
     /* Быстрые цветовые схемы (поверх шаблона) */
-    .theme-blue { --accent:#2563eb; --chip-bg:rgba(37,99,235,.08); --chip-bd:#bfdbfe; }
-    .theme-emerald { --accent:#059669; --chip-bg:rgba(5,150,105,.08); --chip-bd:#a7f3d0; }
-    .theme-rose { --accent:#e11d48; --chip-bg:rgba(225,29,72,.08); --chip-bd:#fecdd3; }
+    .theme-blue {
+      --accent: #2563eb;
+      --chip-bg: rgba(37, 99, 235, .08);
+      --chip-bd: #bfdbfe;
+    }
+
+    .theme-emerald {
+      --accent: #059669;
+      --chip-bg: rgba(5, 150, 105, .08);
+      --chip-bd: #a7f3d0;
+    }
+
+    .theme-rose {
+      --accent: #e11d48;
+      --chip-bg: rgba(225, 29, 72, .08);
+      --chip-bd: #fecdd3;
+    }
 
     /* Размер текста */
-    .font-small { font-size: 14px; }
-    .font-medium { font-size: 16px; }
-    .font-large { font-size: 18px; }
+    .font-small {
+      font-size: 14px;
+    }
 
-    .tpl-european .cv-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 2.25rem; }
-    .tpl-european .cv-left { background: #f4f6ff; border-radius: 1.5rem; padding: 1.75rem; box-shadow: inset 0 0 0 1px rgba(99,102,241,.08); }
-    .tpl-european .cv-header { margin-bottom: 0.5rem; padding-bottom: 0; }
-    .tpl-european .cv-title { font-size: 42px; letter-spacing: -0.03em; }
-    .tpl-european .cv-title-line + .cv-title-line { margin-top: -0.35rem; }
-    .tpl-european #cvPhotoWrap { width: 96px; height: 96px; border: 4px solid #fff; box-shadow: 0 12px 30px rgba(47,71,163,.25); }
-    .tpl-european .section-head { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: #94a3b8; }
-    .tpl-european #personalFields .muted { color: #94a3b8; }
-    .tpl-european #skillsList, .tpl-european #languagesList { display: block; }
+    .font-medium {
+      font-size: 16px;
+    }
 
-    .tpl-europass .cv-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 2.5rem; }
-    .tpl-europass .cv-left { background: linear-gradient(180deg, #f7f9ff 0%, #eef1ff 100%); border-radius: 1.75rem; padding: 1.8rem; box-shadow: inset 0 0 0 1px rgba(31,60,136,.12); }
-    .tpl-europass .cv-right { position: relative; padding-left: 2rem; }
-    .tpl-europass .cv-right::before { content: ''; position: absolute; left: 0.6rem; top: 0.75rem; bottom: 0.75rem; width: 2px; background: rgba(31,60,136,.25); }
-    .tpl-europass .cv-title { font-size: 40px; letter-spacing: -0.025em; }
-    .tpl-europass .cv-title-line + .cv-title-line { margin-top: -0.25rem; }
-    .tpl-europass #cvPhotoWrap { width: 110px; height: 110px; border: 5px solid #fff; box-shadow: 0 16px 35px rgba(15,23,42,.25); }
-    .tpl-europass .section-head { font-size: 0.78rem; letter-spacing: 0.32em; text-transform: uppercase; color: #95a3c5; }
-    .tpl-europass #employmentList > div,
-    .tpl-europass #educationList > div { position: relative; padding-left: 1.5rem; border: none; margin-bottom: 1.75rem; }
-    .tpl-europass #employmentList > div:last-child,
-    .tpl-europass #educationList > div:last-child { margin-bottom: 0; }
-    .tpl-europass #employmentList > div::before,
-    .tpl-europass #educationList > div::before { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 999px; border: 2px solid #fff; background: var(--accent); left: -0.95rem; top: 0.25rem; box-shadow: 0 4px 12px rgba(15,23,42,.18); }
+    .font-large {
+      font-size: 18px;
+    }
+
+    .tpl-european .cv-body {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 2.25rem;
+    }
+
+    .tpl-european .cv-left {
+      background: #f4f6ff;
+      border-radius: 1.5rem;
+      padding: 1.75rem;
+      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, .08);
+    }
+
+    .tpl-european .cv-header {
+      margin-bottom: 0.5rem;
+      padding-bottom: 0;
+    }
+
+    .tpl-european .cv-title {
+      font-size: 42px;
+      letter-spacing: -0.03em;
+    }
+
+    .tpl-european .cv-title-line+.cv-title-line {
+      margin-top: -0.35rem;
+    }
+
+    .tpl-european #cvPhotoWrap {
+      width: 96px;
+      height: 96px;
+      border: 4px solid #fff;
+      box-shadow: 0 12px 30px rgba(47, 71, 163, .25);
+    }
+
+    .tpl-european .section-head {
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
+    .tpl-european #personalFields .muted {
+      color: #94a3b8;
+    }
+
+    .tpl-european #skillsList,
+    .tpl-european #languagesList {
+      display: block;
+    }
+
+    .tpl-europass .cv-body {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 2.5rem;
+    }
+
+    .tpl-europass .cv-left {
+      background: linear-gradient(180deg, #f7f9ff 0%, #eef1ff 100%);
+      border-radius: 1.75rem;
+      padding: 1.8rem;
+      box-shadow: inset 0 0 0 1px rgba(31, 60, 136, .12);
+    }
+
+    .tpl-europass .cv-right {
+      position: relative;
+      padding-left: 2rem;
+    }
+
+    .tpl-europass .cv-right::before {
+      content: '';
+      position: absolute;
+      left: 0.6rem;
+      top: 0.75rem;
+      bottom: 0.75rem;
+      width: 2px;
+      background: rgba(31, 60, 136, .25);
+    }
+
+    .tpl-europass .cv-title {
+      font-size: 40px;
+      letter-spacing: -0.025em;
+    }
+
+    .tpl-europass .cv-title-line+.cv-title-line {
+      margin-top: -0.25rem;
+    }
+
+    .tpl-europass #cvPhotoWrap {
+      width: 110px;
+      height: 110px;
+      border: 5px solid #fff;
+      box-shadow: 0 16px 35px rgba(15, 23, 42, .25);
+    }
+
+    .tpl-europass .section-head {
+      font-size: 0.78rem;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: #95a3c5;
+    }
+
+    .tpl-europass #employmentList>div,
+    .tpl-europass #educationList>div {
+      position: relative;
+      padding-left: 1.5rem;
+      border: none;
+      margin-bottom: 1.75rem;
+    }
+
+    .tpl-europass #employmentList>div:last-child,
+    .tpl-europass #educationList>div:last-child {
+      margin-bottom: 0;
+    }
+
+    .tpl-europass #employmentList>div::before,
+    .tpl-europass #educationList>div::before {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid #fff;
+      background: var(--accent);
+      left: -0.95rem;
+      top: 0.25rem;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, .18);
+    }
 
     @media (max-width: 1023px) {
-      .tpl-european .cv-body { grid-template-columns: 1fr; }
-      .tpl-european .cv-left { order: 1; }
-      .tpl-european .cv-right { order: 2; }
-      .tpl-europass .cv-body { grid-template-columns: 1fr; }
-      .tpl-europass .cv-right { padding-left: 0; }
-      .tpl-europass .cv-right::before { display: none; }
+      .tpl-european .cv-body {
+        grid-template-columns: 1fr;
+      }
+
+      .tpl-european .cv-left {
+        order: 1;
+      }
+
+      .tpl-european .cv-right {
+        order: 2;
+      }
+
+      .tpl-europass .cv-body {
+        grid-template-columns: 1fr;
+      }
+
+      .tpl-europass .cv-right {
+        padding-left: 0;
+      }
+
+      .tpl-europass .cv-right::before {
+        display: none;
+      }
     }
 
     /* Subtle flash when headline appears/updates */
@@ -79,27 +325,42 @@
       padding: 2px 6px;
       border-radius: 6px;
     }
+
     @keyframes headlineFade {
-      0% { background: rgba(59, 130, 246, 0.20); }
-      50% { background: rgba(59, 130, 246, 0.10); }
-      100% { background: transparent; }
+      0% {
+        background: rgba(59, 130, 246, 0.20);
+      }
+
+      50% {
+        background: rgba(59, 130, 246, 0.10);
+      }
+
+      100% {
+        background: transparent;
+      }
     }
   </style>
 </head>
+
 <body class="bg-gray-50">
   <script>
-    // Временное решение: принудительно подключаем Tailwind CDN, чтобы превью не было «голым».
-    (function(){
-      if (!document.getElementById('tw-cdn-fallback')){
-        const s=document.createElement('script');
-        s.id='tw-cdn-fallback';
-        s.src='https://cdn.tailwindcss.com';
+    // Tailwind CDN fallback: гарантируем стили превью при любых сбоях
+    (function () {
+      if (!document.getElementById('tw-cdn-fallback')) {
+        const s = document.createElement('script');
+        s.id = 'tw-cdn-fallback';
+        s.src = 'https://cdn.tailwindcss.com';
         document.head.appendChild(s);
-        console.warn('Tailwind CSS: принудительно загружен CDN в превью');
+        console.warn('Tailwind CSS: CDN fallback загружен (preview)');
       }
     })();
   </script>
   <div class="max-w-4xl mx-auto p-6">
+    <div id="docxNotice" class="hidden bg-yellow-50 border border-yellow-200 text-yellow-900 rounded-lg p-4 mb-4">
+      <div class="font-semibold mb-1">Предпросмотр DOCX недоступен в браузере.</div>
+      <div class="text-sm">Вы можете <a id="docxDownload" href="#" class="underline text-yellow-900">скачать шаблон</a>
+        и открыть его в редакторе документов.</div>
+    </div>
     <div class="flex flex-wrap items-center justify-between mb-4 gap-3">
       <div class="text-sm text-gray-500">Выберите шаблон:</div>
       <div class="flex flex-wrap gap-2" id="tplPicker">
@@ -171,35 +432,60 @@
       </div>
 
       <div class="mt-6 flex flex-wrap gap-3">
-        <a href="/pages/cv-builder" class="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white">Редактировать</a>
+        <a href="/pages/cv-builder"
+          class="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white">Редактировать</a>
         <button id="applyTplBtn" class="inline-flex items-center px-4 py-2 rounded border">Применить шаблон</button>
       </div>
     </div>
   </div>
 
   <script>
+    // Если пришёл docx в query, показываем понятную заглушку
+    (function () {
+      try {
+        const url = new URL(window.location.href);
+        const docx = url.searchParams.get('docx');
+        if (docx) {
+          document.getElementById('tplPicker').classList.add('hidden');
+          document.getElementById('applyTplBtn').classList.add('hidden');
+          document.getElementById('cvRoot').classList.add('hidden');
+          const n = document.getElementById('docxNotice');
+          const a = document.getElementById('docxDownload');
+          a.href = docx;
+          n.classList.remove('hidden');
+        }
+      } catch (_) { }
+    })();
     function getData() {
       try {
         const url = new URL(window.location.href);
         const raw = url.searchParams.get('data');
         if (raw) return JSON.parse(decodeURIComponent(raw));
-      } catch (_) {}
+        // fallback: если передан template в query, используем его до postMessage
+        const tpl = url.searchParams.get('template');
+        if (tpl) {
+          const local = localStorage.getItem('cvBuilderData');
+          const base = local ? JSON.parse(local) : {};
+          base.template = tpl;
+          return base;
+        }
+      } catch (_) { }
       try {
         const local = localStorage.getItem('cvBuilderData');
         if (local) return JSON.parse(local);
-      } catch (_) {}
+      } catch (_) { }
       return {};
     }
 
     function applyTemplate(root, template) {
-      root.classList.remove('tpl-modern','tpl-classic','tpl-minimal','tpl-creative','tpl-european','tpl-europass');
-      const map = { modern:'tpl-modern', classic:'tpl-classic', minimal:'tpl-minimal', creative:'tpl-creative', european:'tpl-european', europass:'tpl-europass' };
+      root.classList.remove('tpl-modern', 'tpl-classic', 'tpl-minimal', 'tpl-creative', 'tpl-european', 'tpl-europass');
+      const map = { modern: 'tpl-modern', classic: 'tpl-classic', minimal: 'tpl-minimal', creative: 'tpl-creative', european: 'tpl-european', europass: 'tpl-europass' };
       root.classList.add(map[template] || 'tpl-modern');
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
         if (btn.dataset.tpl === template) {
-          btn.classList.add('border-blue-400','ring-2','ring-blue-200');
+          btn.classList.add('border-blue-400', 'ring-2', 'ring-blue-200');
         } else {
-          btn.classList.remove('border-blue-400','ring-2','ring-blue-200');
+          btn.classList.remove('border-blue-400', 'ring-2', 'ring-blue-200');
         }
       });
     }
@@ -207,7 +493,7 @@
     function applyQuickStyles(root, settings) {
       const color = (settings && settings.colorScheme) || 'blue';
       const size = (settings && settings.fontSize) || 'medium';
-      root.classList.remove('theme-blue','theme-emerald','theme-rose','font-small','font-medium','font-large');
+      root.classList.remove('theme-blue', 'theme-emerald', 'theme-rose', 'font-small', 'font-medium', 'font-large');
       root.classList.add(`theme-${color}`);
       root.classList.add(`font-${size}`);
     }
@@ -266,7 +552,7 @@
       }
 
       const nameParts = [pinfo['given-name'] || pinfo.givenName, pinfo['family-name'] || pinfo.familyName].filter(Boolean);
-      if (['european','europass'].includes(template) && nameParts.length) {
+      if (['european', 'europass'].includes(template) && nameParts.length) {
         titleEl.innerHTML = nameParts.map(part => `<span class="cv-title-line">${part}</span>`).join('');
       } else {
         const fallbackTitle = data.title || nameParts.join(' ') || 'Моё резюме';
@@ -402,14 +688,14 @@
         const data = local ? JSON.parse(local) : {};
         data.template = tpl;
         localStorage.setItem('cvBuilderData', JSON.stringify(data));
-      } catch (_) {}
+      } catch (_) { }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
       render();
       try {
         window.parent.postMessage({ type: 'cv-ready' }, window.location.origin);
-      } catch (_) {}
+      } catch (_) { }
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
         btn.addEventListener('click', () => {
           const tpl = btn.dataset.tpl;
@@ -448,4 +734,5 @@
     });
   </script>
 </body>
+
 </html>

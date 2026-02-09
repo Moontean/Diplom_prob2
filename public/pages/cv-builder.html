@@ -12,34 +12,33 @@
         .scrollable-container-grid {
             grid-template-columns: repeat(var(--amount-items, 1), minmax(0, 1fr));
         }
-        .can-hover\\:hover\\:bg-gray-100:hover {
+        .can-hover\:hover\:bg-gray-100:hover {
             background-color: #f3f4f6;
         }
-        .can-hover\\:hover\\:bg-brand-50:hover {
+        .can-hover\:hover\:bg-brand-50:hover {
             background-color: #eff6ff;
         }
-        .can-hover\\:hover\\:border-brand-400:hover {
+        .can-hover\:hover\:border-brand-400:hover {
             border-color: #60a5fa;
         }
-        .can-hover\\:active\\:bg-gray-200:active {
+        .can-hover\:active\:bg-gray-200:active {
             background-color: #e5e7eb;
         }
-        .can-hover\\:active\\:bg-brand-100:active {
+        .can-hover\:active\:bg-brand-100:active {
             background-color: #dbeafe;
         }
     </style>
 </head>
 <body class="bg-background font-sans">
         <script>
-            // Временное решение: принудительно подключаем Tailwind CDN,
-            // чтобы исключить «голую» страницу у пользователя.
+            // Tailwind CDN fallback: гарантируем стили при любых сбоях локальной сборки
             (function(){
                 if (!document.getElementById('tw-cdn-fallback')) {
                     const s = document.createElement('script');
                     s.id = 'tw-cdn-fallback';
                     s.src = 'https://cdn.tailwindcss.com';
                     document.head.appendChild(s);
-                    console.warn('Tailwind CSS: принудительно загружен CDN');
+                    console.warn('Tailwind CSS: CDN fallback загружен (builder)');
                 }
             })();
         </script>

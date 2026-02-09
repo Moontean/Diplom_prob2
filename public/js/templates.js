@@ -1,4 +1,4 @@
-(async function() {
+(async function () {
   const grid = document.getElementById('examples-grid');
   if (!grid) return;
   try {
@@ -42,7 +42,7 @@
       const meta = document.createElement('div');
       meta.style.color = '#6b7280';
       meta.style.fontSize = '0.85rem';
-      meta.textContent = `${it.ext.toUpperCase()} • ${Math.max(1, Math.round((it.size || 0)/1024))} KB`;
+      meta.textContent = `${it.ext.toUpperCase()} • ${Math.max(1, Math.round((it.size || 0) / 1024))} KB`;
 
       const actions = document.createElement('div');
       actions.style.display = 'flex';
@@ -58,13 +58,8 @@
 
       const useBtn = document.createElement('a');
       useBtn.className = 'btn btn-primary';
-      useBtn.textContent = 'Использовать похожий стиль';
-
-      let mapped = 'minimal';
-      const nameLower = (it.displayName || '').toLowerCase();
-      if (nameLower.includes('entry')) mapped = 'classic';
-      if (nameLower.includes('experienced')) mapped = 'modern';
-      useBtn.href = `/pages/cv-builder?template=${encodeURIComponent(mapped)}`;
+      useBtn.textContent = 'Использовать справа';
+      useBtn.href = `/pages/cv-builder?example=${encodeURIComponent(it.url)}`;
 
       actions.appendChild(openBtn);
       actions.appendChild(useBtn);
