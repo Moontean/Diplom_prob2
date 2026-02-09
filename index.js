@@ -1044,6 +1044,16 @@ app.post('/api/cv/upload-photo', requireAuth, upload.single('photo'), (req, res)
   }
 });
 
+// Маршрут для выбора шаблона CV
+app.get('/pages/template-selection', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pages', 'template-selection.html'));
+});
+
+// Алиас: /pages/templates → template-selection
+app.get('/pages/templates', (req, res) => {
+  res.redirect(302, '/pages/template-selection');
+});
+
 // Маршрут для CV Builder страницы
 app.get('/pages/cv-builder', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'cv-builder.html'));
@@ -1063,6 +1073,9 @@ app.listen(PORT, () => {
   console.log('   GET /pages/register');
   console.log('   GET /pages/login');
   console.log('   GET /pages/dashboard');
+  console.log('   GET /pages/template-selection');
+  console.log('   GET /pages/templates');
+  console.log('   GET /pages/cv-builder');
   console.log('   GET /pages/cv-builder');
   console.log('   POST /api/register');
   console.log('   POST /api/login');

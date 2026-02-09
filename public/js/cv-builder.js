@@ -4,6 +4,7 @@ class CVBuilder {
         this.itemCounters = {};
         this.isSaving = false;
         this.saveScheduled = false;
+        this.selectedDocxTemplate = null; // Выбранный DOCX шаблон
         this.userData = {
             personalInfo: {},
             employment: [],
@@ -35,6 +36,7 @@ class CVBuilder {
         this.setupQuickStyles();
         this.setupHistoryControls();
         this.setupSidebarUI();
+        this.loadTemplateFromQuery(); // Загрузить выбранный шаблон из URL (в конце, когда DOM готов)
     }
 
     attachEventListeners() {
@@ -1034,10 +1036,21 @@ class CVBuilder {
 
     downloadDocx() {
         this.saveData();
+        
+        // Проверяем, выбран ли шаблон
+        if (!this.selectedDocxTemplate) {
+            alert('Пожалуйста, выберите шаблон резюме на странице создания.');
+            window.location.href = '/pages/template-selection';
+            return;
+        }
+        
         fetch('/api/cv/download-docx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(this.userData)
+            body: JSON.stringify({
+                userData: this.userData,
+                selectedTemplate: this.selectedDocxTemplate
+            })
         })
         .then(async (response) => {
             const ct = response.headers.get('content-type') || '';
@@ -1093,6 +1106,44 @@ class CVBuilder {
                 });
             }
         } catch (_) {}
+    }
+
+    loadTemplateFromQuery() {
+        try {
+            const url = new URL(window.location.href);
+            const template = url.searchParams.get('template');
+            
+            // Маппинг шаблонов на файлы DOCX
+            const templateMap = {
+                'experienced': '/cv_templates/free-experienced-template-resume.docx',
+                'entry-level': '/cv_templates/free-resume-example-entry-level.docx',
+                'custom': null // Создание с нуля - используем обычный конструктор
+            };
+            
+            if (template && templateMap[template]) {
+                this.selectedDocxTemplate = templateMap[template];
+                console.log('Загружен шаблон:', template, '→', this.selectedDocxTemplate);
+                
+                // Показать уведомление пользователю
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-20 right-4 bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+                notification.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5">
+                            <path fill="currentColor" d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/>
+                        </svg>
+                        <span>Шаблон выбран! Заполните данные для создания резюме.</span>
+                    </div>
+                `;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 5000);
+            } else if (template === 'custom') {
+                this.selectedDocxTemplate = null;
+                console.log('Режим создания с нуля');
+            }
+        } catch (err) {
+            console.error('Ошибка загрузки шаблона:', err);
+        }
     }
 
     getDocumentTitle() {
