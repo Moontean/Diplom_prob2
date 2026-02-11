@@ -44,6 +44,7 @@
       font-size: 2rem;
       font-weight: 700;
       color: #0f172a;
+      letter-spacing: -0.01em;
     }
 
     .cv-title-line {
@@ -106,6 +107,31 @@
       --muted: #9ca3af;
       --chip-bg: #ffffff;
       --chip-bd: #e5e7eb;
+    }
+
+    /* Уточнения под PDF-примеры для классического/минимального */
+    .tpl-classic .cv-header {
+      padding-bottom: 0.25rem;
+    }
+
+    .tpl-classic .cv-title {
+      font-size: 36px;
+      letter-spacing: -0.015em;
+    }
+
+    .tpl-minimal .cv-header {
+      padding-bottom: 0.25rem;
+    }
+
+    .tpl-minimal .cv-title {
+      font-size: 34px;
+      letter-spacing: 0;
+    }
+
+    .tpl-minimal .section-head,
+    .tpl-classic .section-head {
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     .tpl-creative {
@@ -383,7 +409,7 @@
           <div class="flex items-center gap-3">
             <span id="cvTemplate" class="text-xs px-2 py-1 rounded border bg-white/70">modern</span>
             <span id="cvDocx" class="text-xs px-2 py-1 rounded border bg-white/70">DOCX: Custom</span>
-            <div id="cvPhotoWrap" class="w-20 h-20 rounded-full overflow-hidden border hidden">
+            <div id="cvPhotoWrap" class="w-20 h-20 overflow-hidden border hidden">
               <img id="cvPhoto" alt="photo" class="w-full h-full object-cover" />
             </div>
           </div>
@@ -481,6 +507,19 @@
       root.classList.remove('tpl-modern', 'tpl-classic', 'tpl-minimal', 'tpl-creative', 'tpl-european', 'tpl-europass');
       const map = { modern: 'tpl-modern', classic: 'tpl-classic', minimal: 'tpl-minimal', creative: 'tpl-creative', european: 'tpl-european', europass: 'tpl-europass' };
       root.classList.add(map[template] || 'tpl-modern');
+      // Форма фото согласно шаблону (квадрат/прямоугольник для PDF-примеров)
+      try {
+        const wrap = document.getElementById('cvPhotoWrap');
+        if (wrap) {
+          if (template === 'classic' || template === 'minimal') {
+            wrap.classList.remove('rounded-full');
+            wrap.classList.add('rounded');
+          } else {
+            wrap.classList.remove('rounded');
+            wrap.classList.add('rounded-full');
+          }
+        }
+      } catch (_) { }
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
         if (btn.dataset.tpl === template) {
           btn.classList.add('border-blue-400', 'ring-2', 'ring-blue-200');
@@ -718,18 +757,44 @@
     });
   </script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script>
     // PNG export bridge
     window.addEventListener('message', async (event) => {
       const msg = event.data;
-      if (!msg || msg.type !== 'export-png') return;
-      try {
-        const root = document.getElementById('cvRoot');
-        const canvas = await html2canvas(root, { backgroundColor: null, scale: 2 });
-        const dataUrl = canvas.toDataURL('image/png');
-        window.parent.postMessage({ type: 'export-png-result', dataUrl }, window.location.origin);
-      } catch (e) {
-        window.parent.postMessage({ type: 'export-png-result', dataUrl: null, error: e?.message }, window.location.origin);
+      if (!msg) return;
+      if (msg.type === 'export-png') {
+        try {
+          const root = document.getElementById('cvRoot');
+          const canvas = await html2canvas(root, { backgroundColor: null, scale: 2 });
+          const dataUrl = canvas.toDataURL('image/png');
+          window.parent.postMessage({ type: 'export-png-result', dataUrl }, window.location.origin);
+        } catch (e) {
+          window.parent.postMessage({ type: 'export-png-result', dataUrl: null, error: e?.message }, window.location.origin);
+        }
+      }
+      if (msg.type === 'export-pdf') {
+        try {
+          const root = document.getElementById('cvRoot');
+          const canvas = await html2canvas(root, { backgroundColor: '#ffffff', scale: 2 });
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const { jsPDF } = window.jspdf || {};
+          if (!jsPDF) throw new Error('jsPDF недоступен');
+          const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+          const imgWidth = canvas.width * scale;
+          const imgHeight = canvas.height * scale;
+          const x = (pageWidth - imgWidth) / 2;
+          const y = 32;
+          pdf.addImage(imgData, 'JPEG', x, y, imgWidth, imgHeight);
+          const blob = pdf.output('blob');
+          const url = URL.createObjectURL(blob);
+          window.parent.postMessage({ type: 'export-pdf-result', url }, window.location.origin);
+        } catch (e) {
+          window.parent.postMessage({ type: 'export-pdf-result', url: null, error: e?.message }, window.location.origin);
+        }
       }
     });
   </script>

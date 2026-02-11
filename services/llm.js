@@ -98,10 +98,21 @@ function extractJSON(text) {
   const end = raw.lastIndexOf('}');
   if (start >= 0 && end > start) {
     const candidate = raw.slice(start, end + 1);
-    try { return JSON.parse(candidate); } catch (_) {}
+    try { return JSON.parse(candidate); } catch (_) { }
   }
   // Попытка распарсить как JSON напрямую
   try { return JSON.parse(raw); } catch (_) { return null; }
+}
+
+function extractHTML(text) {
+  if (!text) return null;
+  // Извлекаем из ```html ... ``` или любых тройных кавычек
+  const fenceMatch = text.match(/```html\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  const raw = fenceMatch ? fenceMatch[1] : text;
+  // Проверяем наличие HTML-тегов
+  const looksHtml = /<!DOCTYPE\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<div[\s>]|<section[\s>]|<style[\s>]/i.test(raw);
+  if (looksHtml) return raw.trim();
+  return null;
 }
 
 async function callLLM(prompt) {
@@ -139,7 +150,9 @@ async function callLLM(prompt) {
     if (typeof fetch !== 'function') {
       throw new Error('Fetch is not available in this Node version. Use Node 18+ or add a fetch polyfill.');
     }
-    const base = OAI_BASE_URL.replace(/\/$/, '');
+    // Нормализуем базовый URL: гарантируем наличие /v1
+    let base = OAI_BASE_URL.replace(/\/$/, '');
+    if (!/\/v1$/i.test(base)) base = `${base}/v1`;
     const url = `${base}/chat/completions`;
     const headers = { 'Content-Type': 'application/json' };
     if (OAI_API_KEY) headers['Authorization'] = `Bearer ${OAI_API_KEY}`;
@@ -235,5 +248,118 @@ async function evaluateOpenAnswer({ question, answer }) {
 
 module.exports = {
   generateAssessment,
-  evaluateOpenAnswer
+  evaluateOpenAnswer,
+  // Генерация HTML (Vue совместимый, но без сборки) по изображению первой страницы PDF
+  // Поддерживается только провайдер Gemini (нужен GEMINI_API_KEY). Возвращает строку HTML.
+  generateHtmlFromImage: async function ({ imageBase64, title = 'Resume', strict = false }) {
+    // Сначала пробуем Gemini (мультимодальный ввод изображений).
+    // Пробуем Gemini только если задан ключ, чтобы не спамить предупреждениями
+    let useGemini = false;
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        useGemini = await ensureGemini();
+      } catch (_) {
+        useGemini = false;
+      }
+    }
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      throw new Error('imageBase64 is required');
+    }
+    // Удаляем префикс data URL, если есть
+    const match = imageBase64.match(/^data:(image\/png|image\/jpeg);base64,(.*)$/i);
+    const mime = match ? match[1] : 'image/png';
+    const data = match ? match[2] : imageBase64;
+
+    const promptText = `Ты — фронтенд разработчик. На основе изображения (скриншота PDF страницы) создай ОДИН цельный HTML-файл с ВСТРОЕННЫМИ CSS-стилями (без внешних зависимостей), максимально точно повторяющий визуальный дизайн (пиксельно-точно).
+Требования:
+  - Верни ТОЛЬКО чистый HTML (без пояснений, без Markdown и без бэктиков), начинай с <!DOCTYPE html>.
+  - Приоритет — точное совпадение дизайна: допускай абсолютное позиционирование, точные отступы/размеры/цвета.
+  - Не используй внешние ресурсы (<link>, CDNs). Весь CSS — внутри <style>.
+  - НЕ вставляй изображение скриншота как <img> для основного контента: цель — текстовая верстка.
+- Заголовок документа: ${title}.
+- Страница должна занимать всю ширину контейнера, быть масштабируемой.
+`;
+    if (useGemini && geminiModel) {
+      // Первая попытка (основной промпт)
+      let res = await geminiModel.generateContent([
+        { inlineData: { mimeType: mime, data } },
+        { text: promptText }
+      ]);
+      let text = res?.response?.text?.() || res?.text?.() || '';
+      let html = extractHTML(text);
+      // Ретрай с более строгими требованиями
+      if (!html) {
+        const retryPrompt = `${promptText}\nВерни строго чистый HTML, начинай с <!DOCTYPE html>, без Markdown и бэктиков.`;
+        res = await geminiModel.generateContent([
+          { inlineData: { mimeType: mime, data } },
+          { text: retryPrompt }
+        ]);
+        text = res?.response?.text?.() || res?.text?.() || '';
+        html = extractHTML(text);
+      }
+      if (html) return html;
+      if (strict) throw new Error('AI не вернул валидный HTML');
+      // иначе продолжаем попытку через OpenAI-совместимый хост
+    }
+    // Fallback: OpenAI-совместимый хост (например LM Studio) с поддержкой мультимодальных сообщений.
+    // Нормализуем базовый URL: гарантируем наличие /v1
+    let base = OAI_BASE_URL.replace(/\/$/, '');
+    if (!/\/v1$/i.test(base)) base = `${base}/v1`;
+    const url = `${base}/chat/completions`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (OAI_API_KEY) headers['Authorization'] = `Bearer ${OAI_API_KEY}`;
+    const body = {
+      model: OAI_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: promptText },
+            { type: 'image_url', image_url: { url: `data:${mime};base64,${data}` } }
+          ]
+        }
+      ],
+      temperature: 0.2,
+      max_tokens: 4096
+    };
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`OpenAI-compatible error: ${res.status} ${errText}`);
+    }
+    const json = await res.json();
+    let text = json?.choices?.[0]?.message?.content || json?.choices?.[0]?.text || '';
+    let html = extractHTML(text);
+    if (!html) {
+      // Вторая попытка с более строгим промптом
+      const retryBody = {
+        ...body,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: `${promptText}\nВерни строго чистый HTML, начинай с <!DOCTYPE html>, без Markdown и бэктиков.` },
+              { type: 'image_url', image_url: { url: `data:${mime};base64,${data}` } }
+            ]
+          }
+        ]
+      };
+      const res2 = await fetch(url, { method: 'POST', headers, body: JSON.stringify(retryBody) });
+      if (!res2.ok) {
+        const errText2 = await res2.text().catch(() => '');
+        throw new Error(`OpenAI-compatible error(retry): ${res2.status} ${errText2}`);
+      }
+      const json2 = await res2.json();
+      text = json2?.choices?.[0]?.message?.content || json2?.choices?.[0]?.text || '';
+      html = extractHTML(text);
+    }
+    if (!html) {
+      if (strict) throw new Error('AI не вернул валидный HTML');
+      // Надёжный фолбэк: формируем валидный HTML с встроенным изображением (пиксель-в-пиксель превью).
+      const dataUrl = `data:${mime};base64,${data}`;
+      const fallback = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>html,body{margin:0;padding:0;background:#f8fafc} .page-wrap{display:flex;align-items:center;justify-content:center;padding:16px} .page{max-width:100%;height:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);background:#fff}</style></head><body><div class="page-wrap"><img class="page" src="${dataUrl}" alt="${title}"></div></body></html>`;
+      return fallback;
+    }
+    return html;
+  }
 };

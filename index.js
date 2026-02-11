@@ -24,7 +24,10 @@ const User = require('./models/User');
 const CV = require('./models/CV');
 const Assessment = require('./models/Assessment');
 const { generateAssessment, evaluateOpenAnswer } = require('./services/llm');
+const { generateHtmlFromImage } = require('./services/llm');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = require('docx');
+const PizZip = require('pizzip');
+const Docxtemplater = require('docxtemplater');
 const { cvSchema } = require('./services/cvValidation');
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -643,11 +646,11 @@ app.post('/api/register', authLimiter, async (req, res) => {
 // POST маршрут для входа
 app.post('/api/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
-  
+
   if (!email || !password) {
     return res.status(400).json({ success: false, message: 'Email и пароль обязательны' });
   }
-  
+
   try {
     if (isDBConnected) {
       // Используем MongoDB
@@ -655,20 +658,20 @@ app.post('/api/login', authLimiter, async (req, res) => {
       if (!user || !user.isActive) {
         return res.status(401).json({ success: false, message: 'Неверный email или пароль' });
       }
-      
+
       const isValidPassword = await user.comparePassword(password);
       if (!isValidPassword) {
         return res.status(401).json({ success: false, message: 'Неверный email или пароль' });
       }
-      
+
       // Обновляем последний вход
       user.lastLogin = new Date();
       await user.save();
-      
+
       // Создаем сессию
       req.session.userId = user._id;
       req.session.user = user.getPublicProfile();
-      
+
       res.json({
         success: true,
         message: 'Вход выполнен успешно!',
@@ -680,19 +683,19 @@ app.post('/api/login', authLimiter, async (req, res) => {
       if (!user) {
         return res.status(401).json({ success: false, message: 'Неверный email или пароль' });
       }
-      
+
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
         return res.status(401).json({ success: false, message: 'Неверный email или пароль' });
       }
-      
+
       req.session.userId = email;
       req.session.user = {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName
       };
-      
+
       res.json({
         success: true,
         message: 'Вход выполнен успешно!',
@@ -739,7 +742,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB
@@ -763,6 +766,13 @@ const upload = multer({
         cb(null, true);
       } else {
         cb(new Error('Разрешены только PDF, DOC и DOCX файлы'), false);
+      }
+    } else if (file.fieldname === 'template') {
+      // Для пользовательских PDF-шаблонов предпросмотра
+      if (file.mimetype === 'application/pdf') {
+        cb(null, true);
+      } else {
+        cb(new Error('Разрешены только PDF файлы шаблонов'), false);
       }
     } else {
       cb(new Error('Неизвестный тип поля'), false);
@@ -822,6 +832,21 @@ function validateCv(req, res, next) {
 
 // Защищённая раздача загруженных файлов
 app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
+
+// Загрузка пользовательского PDF-шаблона для предпросмотра
+app.post('/api/templates/upload', requireAuth, upload.single('template'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Файл не загружен' });
+    }
+    // Файлы сохраняются в /uploads и раздаются по защищённому маршруту
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ success: true, url, fileName: req.file.originalname });
+  } catch (error) {
+    console.error('Ошибка загрузки шаблона:', error);
+    res.status(500).json({ success: false, message: 'Не удалось загрузить шаблон' });
+  }
+});
 
 // Получение последнего результата теста пользователя (без процентов)
 async function getLatestAssessmentResult(userId) {
@@ -912,7 +937,7 @@ app.post('/api/cv/create', requireAuth, async (req, res) => {
         skills: [],
         languages: []
       });
-      
+
       await newCV.save();
       res.json({
         success: true,
@@ -958,7 +983,7 @@ app.post('/api/cv/save', requireAuth, validateCv, async (req, res) => {
     const payload = req.validatedCv || {};
     if (isDBConnected) {
       const { _id, ...cvData } = payload;
-      
+
       let cv;
       if (_id) {
         // Обновление существующего CV
@@ -978,7 +1003,7 @@ app.post('/api/cv/save', requireAuth, validateCv, async (req, res) => {
         });
         await cv.save();
       }
-      
+
       res.json({
         success: true,
         message: 'Резюме сохранено успешно',
@@ -993,7 +1018,7 @@ app.post('/api/cv/save', requireAuth, validateCv, async (req, res) => {
     }
   } catch (error) {
     console.error('Ошибка сохранения CV:', error);
-    
+
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -1001,7 +1026,7 @@ app.post('/api/cv/save', requireAuth, validateCv, async (req, res) => {
         errors: Object.values(error.errors).map(err => err.message)
       });
     }
-    
+
     res.status(500).json({ success: false, message: 'Ошибка сервера' });
   }
 });
@@ -1031,7 +1056,7 @@ app.post('/api/cv/upload-photo', requireAuth, upload.single('photo'), (req, res)
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'Файл не загружен' });
     }
-    
+
     const photoUrl = `/uploads/${req.file.filename}`;
     res.json({
       success: true,
@@ -1062,6 +1087,11 @@ app.get('/pages/cv-builder', requireAuth, (req, res) => {
 // Страница предварительного просмотра CV
 app.get('/pages/cv-preview', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'cv-preview.html'));
+});
+
+// Страница предпросмотра PDF с оверлеями
+app.get('/pages/pdf-overlay', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pages', 'pdf-overlay.html'));
 });
 
 app.listen(PORT, () => {
@@ -1328,6 +1358,61 @@ app.get('/api/assessment/latest', requireAuth, async (req, res) => {
 app.post('/api/cv/download-docx', requireAuth, requirePremium, validateCv, async (req, res) => {
   try {
     const cv = req.validatedCv || {};
+    // Попытка заполнить выбранный DOCX-шаблон через Docxtemplater
+    const chosenTemplate = (req.body && req.body.selectedTemplate) || '';
+    let templatePath = null;
+    if (chosenTemplate === '/cv_templates/free-experienced-template-resume.docx') {
+      templatePath = path.join(__dirname, 'public', 'cv_templates', 'free-experienced-template-resume.docx');
+    } else if (chosenTemplate === '/cv_templates/free-resume-example-entry-level.docx') {
+      templatePath = path.join(__dirname, 'public', 'cv_templates', 'free-resume-example-entry-level.docx');
+    }
+    if (templatePath && fs.existsSync(templatePath)) {
+      try {
+        const content = fs.readFileSync(templatePath, 'binary');
+        const zip = new PizZip(content);
+        const docx = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+        const p = cv.personalInfo || {};
+        const templateData = {
+          firstName: p['given-name'] || p.givenName || '',
+          lastName: p['family-name'] || p.familyName || '',
+          email: p.email || '',
+          phone: p.phone || '',
+          address: p.address || '',
+          city: p.city || '',
+          postalCode: p['postal-code'] || p.postalCode || '',
+          jobPosition: p['job-position'] || p.jobPosition || '',
+          website: p.website || '',
+          linkedin: p.linkedin || '',
+          birthdate: p.birthdate || '',
+          title: cv.title || ''
+        };
+        const upperAliases = {
+          FIRSTNAME: templateData.firstName,
+          LASTNAME: templateData.lastName,
+          EMAIL: templateData.email,
+          NUMBER: templateData.phone,
+          CITY: templateData.city,
+          ADDRESS: templateData.address,
+          POSTALCODE: templateData.postalCode,
+          JOBPOSITION: templateData.jobPosition,
+          WEBSITE: templateData.website,
+          LINKEDIN: templateData.linkedin,
+          BIRTHDATE: templateData.birthdate,
+          FULLNAME: [templateData.firstName, templateData.lastName].filter(Boolean).join(' ')
+        };
+        Object.assign(templateData, upperAliases);
+        docx.setData(templateData);
+        docx.render();
+        const buf = docx.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+        const filename = `${(cv.title || 'resume').replace(/[^\w\-]+/g, '_')}.docx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        return res.send(buf);
+      } catch (err) {
+        console.error('Ошибка Docxtemplater:', err);
+        // Продолжим генерацию документа с нуля ниже
+      }
+    }
     const children = [];
 
     const dataUrlToBuffer = (dataUrl) => {
@@ -1566,5 +1651,88 @@ app.post('/api/cv/cover-letter', requireAuth, validateCv, async (req, res) => {
   } catch (error) {
     console.error('Ошибка генерации сопроводительного письма:', error);
     res.status(500).json({ success: false, message: 'Не удалось сгенерировать сопроводительное письмо' });
+  }
+});
+
+// Конвертация скриншота PDF (PNG data URL) в HTML через ИИ
+app.post('/api/templates/ai-html', requireAuth, async (req, res) => {
+  try {
+    const { imageDataUrl, title } = req.body || {};
+    if (!imageDataUrl || typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ success: false, message: 'Некорректные данные изображения' });
+    }
+    // Попробуем через LLM, но при ошибке сформируем надёжный фолбэк (встроенное изображение).
+    let html;
+    try {
+      html = await generateHtmlFromImage({ imageBase64: imageDataUrl, title: title || 'Resume', strict: false });
+    } catch (e) {
+      console.warn('AI HTML generation failed, using fallback:', e?.message || e);
+      const m = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+      const mime = m ? m[1] : 'image/png';
+      const safeTitle = String(title || 'resume').trim() || 'resume';
+      html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>html,body{margin:0;padding:0;background:#f8fafc} .page-wrap{display:flex;align-items:center;justify-content:center;padding:16px} .page{max-width:100%;height:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);background:#fff}</style></head><body><div class="page-wrap"><img class="page" src="${imageDataUrl}" alt="${safeTitle}"></div></body></html>`;
+    }
+    // Сохранение HTML в uploads/generated
+    const genDir = path.join(__dirname, 'uploads', 'generated');
+    if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
+    const safeTitle = String(title || 'resume').trim().replace(/[^\w\-]+/g, '_').toLowerCase();
+    const fileName = `${safeTitle || 'resume'}-${Date.now()}.html`;
+    const filePath = path.join(genDir, fileName);
+    await fs.promises.writeFile(filePath, html, 'utf8');
+    const url = `/uploads/generated/${fileName}`;
+    return res.json({ success: true, url, fileName });
+  } catch (err) {
+    console.error('Ошибка AI HTML генерации:', err);
+    res.status(500).json({ success: false, message: 'Не удалось сгенерировать HTML' });
+  }
+});
+
+// Строгая конвертация: только текстовая HTML-верстка, без фолбэка-изображения
+app.post('/api/templates/ai-html-strict', requireAuth, async (req, res) => {
+  try {
+    const { imageDataUrl, title } = req.body || {};
+    if (!imageDataUrl || typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ success: false, message: 'Некорректные данные изображения' });
+    }
+    let html;
+    try {
+      html = await generateHtmlFromImage({ imageBase64: imageDataUrl, title: title || 'Resume', strict: true });
+    } catch (e) {
+      return res.status(422).json({ success: false, message: 'Ошибка ИИ: ' + (e?.message || 'unknown') });
+    }
+    const genDir = path.join(__dirname, 'uploads', 'generated');
+    if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
+    const safeTitle = String(title || 'resume').trim().replace(/[^\w\-]+/g, '_').toLowerCase();
+    const fileName = `${safeTitle || 'resume'}-${Date.now()}.html`;
+    const filePath = path.join(genDir, fileName);
+    await fs.promises.writeFile(filePath, html, 'utf8');
+    const url = `/uploads/generated/${fileName}`;
+    return res.json({ success: true, url, fileName });
+  } catch (err) {
+    console.error('Ошибка AI HTML strict:', err);
+    res.status(500).json({ success: false, message: 'Не удалось сгенерировать текстовый HTML' });
+  }
+});
+
+// Сохранение произвольного HTML (строгий текстовый детерминированный фолбэк)
+app.post('/api/templates/save-html', requireAuth, async (req, res) => {
+  try {
+    const { html, title } = req.body || {};
+    if (!html || typeof html !== 'string') {
+      return res.status(400).json({ success: false, message: 'Пустой HTML' });
+    }
+    // Нормализуем минимально: гарантируем DOCTYPE
+    const content = /^\s*<!DOCTYPE\s+html/i.test(html) ? html : `<!DOCTYPE html>` + html;
+    const genDir = path.join(__dirname, 'uploads', 'generated');
+    if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
+    const safeTitle = String(title || 'resume').trim().replace(/[^\w\-]+/g, '_').toLowerCase();
+    const fileName = `${safeTitle || 'resume'}-${Date.now()}.html`;
+    const filePath = path.join(genDir, fileName);
+    await fs.promises.writeFile(filePath, content, 'utf8');
+    const url = `/uploads/generated/${fileName}`;
+    return res.json({ success: true, url, fileName });
+  } catch (err) {
+    console.error('Ошибка сохранения HTML:', err);
+    return res.status(500).json({ success: false, message: 'Не удалось сохранить HTML' });
   }
 });

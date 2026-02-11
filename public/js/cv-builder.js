@@ -5,6 +5,12 @@ class CVBuilder {
         this.isSaving = false;
         this.saveScheduled = false;
         this.selectedDocxTemplate = null; // Выбранный DOCX шаблон
+        // Режим превью: 'pdf' (пример файла) или 'html' (редактируемый шаблон)
+        try {
+            this.previewMode = localStorage.getItem('previewMode') || 'pdf';
+        } catch (_) {
+            this.previewMode = 'pdf';
+        }
         this.userData = {
             personalInfo: {},
             employment: [],
@@ -44,6 +50,8 @@ class CVBuilder {
         this.setupSidebarUI();
         this.loadTemplateFromQuery(); // Загрузить выбранный шаблон из URL (в конце, когда DOM готов)
         this.updateTemplateLabel();
+        // Если ранее был загружен пользовательский PDF шаблон — восстановим предпросмотр
+        this.restoreCustomPdfTemplate();
     }
 
     attachEventListeners() {
@@ -108,11 +116,19 @@ class CVBuilder {
         const saveFromOptionsBtn = document.getElementById('save-from-options-btn');
         const clearFormBtn = document.getElementById('clear-form-btn');
         const addTestResultsBtn = document.getElementById('add-test-results-btn');
+        const openSamplePdfBtn = document.getElementById('open-sample-pdf-btn');
+        const togglePreviewModeBtn = document.getElementById('toggle-preview-mode-btn');
+        const uploadPdfTemplateBtn = document.getElementById('upload-pdf-template-btn');
+        const convertPdfToHtmlBtn = document.getElementById('convert-pdf-to-html-btn');
+        const convertPdfToHtmlStrictBtn = document.getElementById('convert-pdf-to-html-strict-btn');
+        const pdfTemplateInput = document.getElementById('pdf-template-input');
 
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', () => this.downloadDocx());
         const downloadPngBtn = document.getElementById('download-png-btn');
         if (downloadPngBtn) downloadPngBtn.addEventListener('click', () => this.requestPngExport());
+        const downloadPdfHtmlBtn = document.getElementById('download-pdf-html-btn');
+        if (downloadPdfHtmlBtn) downloadPdfHtmlBtn.addEventListener('click', () => this.requestPdfExport());
         if (coverLetterBtn) coverLetterBtn.addEventListener('click', () => this.generateCoverLetter());
         if (previewBtn) previewBtn.addEventListener('click', () => this.showPreview());
         if (saveBtn) saveBtn.addEventListener('click', async () => {
@@ -224,6 +240,195 @@ class CVBuilder {
                 }
             });
         }
+        if (openSamplePdfBtn) {
+            openSamplePdfBtn.addEventListener('click', () => {
+                try {
+                    const template = this.userData?.template || 'modern';
+                    const pdfMap = {
+                        classic: '/cv_templates/free-experienced-template-resume.pdf',
+                        minimal: '/cv_templates/free-resume-example-entry-level.pdf'
+                    };
+                    const url = pdfMap[template];
+                    if (url) {
+                        window.open(url, '_blank', 'noopener');
+                    } else {
+                        alert('Для выбранного шаблона пример PDF отсутствует');
+                    }
+                } catch (_) { }
+                optionsMenu?.classList.add('hidden');
+            });
+        }
+
+        if (uploadPdfTemplateBtn && pdfTemplateInput) {
+            uploadPdfTemplateBtn.addEventListener('click', () => {
+                pdfTemplateInput.click();
+            });
+            pdfTemplateInput.addEventListener('change', async (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                if (file.type !== 'application/pdf') {
+                    alert('Пожалуйста, выберите PDF файл шаблона');
+                    return;
+                }
+                try {
+                    const fd = new FormData();
+                    fd.append('template', file);
+                    const resp = await fetch('/api/templates/upload', { method: 'POST', body: fd });
+                    if (resp.status === 401) { this.redirectToAuthRequired(); return; }
+                    const data = await resp.json();
+                    if (!resp.ok || !data?.success || !data?.url) throw new Error(data?.message || 'Не удалось загрузить шаблон');
+                    this.customPdfTemplateUrl = data.url;
+                    try { localStorage.setItem('customPdfTemplateUrl', this.customPdfTemplateUrl); } catch (_) { }
+                    // Открываем новую страницу предпросмотра с оверлеями
+                    const frame = document.getElementById('live-preview-frame');
+                    if (frame) {
+                        const url = `/pages/pdf-overlay?src=${encodeURIComponent(this.customPdfTemplateUrl)}`;
+                        frame.src = url;
+                        // отправим данные спустя короткую задержку
+                        setTimeout(() => this.sendPreviewMessage(this.userData), 200);
+                        this.ensurePreviewVisible();
+                    }
+                    optionsMenu?.classList.add('hidden');
+                } catch (err) {
+                    console.error('Upload template error:', err);
+                    alert(err?.message || 'Ошибка загрузки шаблона');
+                } finally {
+                    // reset input value to allow re-uploading same file later
+                    e.target.value = '';
+                }
+            });
+        }
+
+        // AI: конвертация текущего PDF превью в автономный HTML
+        if (convertPdfToHtmlBtn) {
+            convertPdfToHtmlBtn.addEventListener('click', async () => {
+                try {
+                    const frame = document.getElementById('live-preview-frame');
+                    if (!frame || !frame.contentWindow) {
+                        alert('Предпросмотр не готов');
+                        return;
+                    }
+                    // Запросим PNG из оверлея (первая страница)
+                    this.sendPreviewMessage(this.userData);
+                    frame.contentWindow.postMessage({ type: 'export-png' }, window.location.origin);
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        const handler = (e) => {
+                            const msg = e?.data;
+                            if (!msg || msg.type !== 'export-png-result') return;
+                            window.removeEventListener('message', handler);
+                            if (msg.error) reject(new Error(msg.error)); else resolve(msg.dataUrl);
+                        };
+                        window.addEventListener('message', handler);
+                        // Таймаут
+                        setTimeout(() => {
+                            window.removeEventListener('message', handler);
+                            reject(new Error('Не удалось получить PNG из предпросмотра'));
+                        }, 10000);
+                    });
+                    if (!dataUrl) throw new Error('PNG пустой');
+                    const resp = await fetch('/api/templates/ai-html', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageDataUrl: dataUrl, title: this.getDocumentTitle() || 'Resume' })
+                    });
+                    if (resp.status === 401) { this.redirectToAuthRequired(); return; }
+                    const result = await resp.json().catch(() => ({ success: false }));
+                    if (!resp.ok || !result?.success || !result?.url) throw new Error(result?.message || 'AI конвертация не удалась');
+                    // Заменяем превью на сгенерированный HTML
+                    frame.src = result.url;
+                    this.ensurePreviewVisible();
+                    optionsMenu?.classList.add('hidden');
+                } catch (err) {
+                    console.error('AI HTML error:', err);
+                    alert(err?.message || 'Не удалось сконвертировать PDF');
+                }
+            });
+        }
+
+        if (convertPdfToHtmlStrictBtn) {
+            convertPdfToHtmlStrictBtn.addEventListener('click', async () => {
+                try {
+                    const frame = document.getElementById('live-preview-frame');
+                    if (!frame || !frame.contentWindow) {
+                        alert('Предпросмотр не готов');
+                        return;
+                    }
+                    // Пытаемся сначала строгую AI-конвертацию
+                    this.sendPreviewMessage(this.userData);
+                    frame.contentWindow.postMessage({ type: 'export-png' }, window.location.origin);
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        const handler = (e) => {
+                            const msg = e?.data;
+                            if (!msg || msg.type !== 'export-png-result') return;
+                            window.removeEventListener('message', handler);
+                            if (msg.error) reject(new Error(msg.error)); else resolve(msg.dataUrl);
+                        };
+                        window.addEventListener('message', handler);
+                        setTimeout(() => {
+                            window.removeEventListener('message', handler);
+                            reject(new Error('Не удалось получить PNG из предпросмотра'));
+                        }, 10000);
+                    });
+                    if (!dataUrl) throw new Error('PNG пустой');
+                    let resp = await fetch('/api/templates/ai-html-strict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ imageDataUrl: dataUrl, title: this.getDocumentTitle() || 'Resume' })
+                    });
+                    if (resp.status === 401) { this.redirectToAuthRequired(); return; }
+                    let result = await resp.json().catch(() => ({ success: false }));
+                    if (!resp.ok || !result?.success || !result?.url) {
+                        // Если AI не вернул валидный HTML, выполняем детерминированный фолбэк: экспорт текста из PDF
+                        frame.contentWindow.postMessage({ type: 'export-strict-html' }, window.location.origin);
+                        const html = await new Promise((resolve, reject) => {
+                            const handler = (e) => {
+                                const msg = e?.data;
+                                if (!msg || msg.type !== 'export-strict-html-result') return;
+                                window.removeEventListener('message', handler);
+                                if (msg.error) reject(new Error(msg.error)); else resolve(msg.html);
+                            };
+                            window.addEventListener('message', handler);
+                            setTimeout(() => {
+                                window.removeEventListener('message', handler);
+                                reject(new Error('Не удалось получить текстовый HTML'));
+                            }, 10000);
+                        });
+                        if (!html) throw new Error('Пустой HTML');
+                        resp = await fetch('/api/templates/save-html', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ html, title: this.getDocumentTitle() || 'Resume' })
+                        });
+                        if (resp.status === 401) { this.redirectToAuthRequired(); return; }
+                        result = await resp.json().catch(() => ({ success: false }));
+                        if (!resp.ok || !result?.success || !result?.url) throw new Error(result?.message || 'Сохранение HTML не удалось');
+                    }
+                    frame.src = result.url;
+                    this.ensurePreviewVisible();
+                    optionsMenu?.classList.add('hidden');
+                } catch (err) {
+                    console.error('AI HTML strict error:', err);
+                    alert(err?.message || 'Не удалось получить текстовый HTML');
+                }
+            });
+        }
+
+        if (togglePreviewModeBtn) {
+            const refreshLabel = () => {
+                const mode = this.previewMode === 'html' ? 'HTML → PDF' : 'PDF → HTML';
+                togglePreviewModeBtn.textContent = `Переключить режим превью: ${mode}`;
+            };
+            refreshLabel();
+            togglePreviewModeBtn.addEventListener('click', () => {
+                this.previewMode = this.previewMode === 'html' ? 'pdf' : 'html';
+                try { localStorage.setItem('previewMode', this.previewMode); } catch (_) { }
+                refreshLabel();
+                // Перепривязать превью под текущий шаблон
+                const tpl = this.userData?.template || 'modern';
+                this.applyPreviewForTemplate(tpl);
+                optionsMenu?.classList.add('hidden');
+            });
+        }
 
         // Выбор шаблона
         const templateButtons = document.querySelectorAll('.template-option');
@@ -261,6 +466,19 @@ class CVBuilder {
                 this.pushHistoryDebounced();
             }
         });
+    }
+
+    restoreCustomPdfTemplate() {
+        try {
+            const stored = localStorage.getItem('customPdfTemplateUrl');
+            if (!stored) return;
+            this.customPdfTemplateUrl = stored;
+            const frame = document.getElementById('live-preview-frame');
+            if (!frame) return;
+            frame.src = `/pages/pdf-overlay?src=${encodeURIComponent(stored)}`;
+            setTimeout(() => this.sendPreviewMessage(this.userData), 200);
+            this.ensurePreviewVisible();
+        } catch (_) { }
     }
 
     setupSidebarUI() {
@@ -464,6 +682,30 @@ class CVBuilder {
             const a = document.createElement('a');
             a.href = url; a.download = `${this.getDocumentTitle() || 'resume'}.png`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }, { once: true });
+    }
+
+    // Экспорт PDF из HTML-превью
+    requestPdfExport() {
+        const frame = document.getElementById('live-preview-frame');
+        if (!frame || !frame.contentWindow) {
+            alert('Предпросмотр недоступен');
+            return;
+        }
+        this.saveData();
+        this.sendPreviewMessage(this.userData);
+        frame.contentWindow.postMessage({ type: 'export-pdf' }, window.location.origin);
+        window.addEventListener('message', (event) => {
+            const msg = event.data;
+            if (!msg || msg.type !== 'export-pdf-result') return;
+            if (!msg.url) {
+                alert(msg.error || 'Не удалось сформировать PDF');
+                return;
+            }
+            const a = document.createElement('a');
+            a.href = msg.url; a.download = `${this.getDocumentTitle() || 'resume'}.pdf`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(msg.url), 5000);
         }, { once: true });
     }
 
@@ -1125,14 +1367,40 @@ class CVBuilder {
             if (exampleUrl) {
                 const decoded = decodeURIComponent(exampleUrl);
                 this.ensurePreviewVisible();
-                this.setPreviewToUrl(decoded);
-                // Если одновременно передан визуальный шаблон — отметим выбор в UI,
-                // но превью оставим на файле примера
+
+                // Определим визуальный шаблон по имени файла примера
+                let visualTpl = this.userData?.template || 'modern';
+                try {
+                    if (/free-experienced-template-resume\.pdf$/i.test(decoded)) {
+                        visualTpl = 'classic';
+                    } else if (/free-resume-example-entry-level\.pdf$/i.test(decoded)) {
+                        visualTpl = 'minimal';
+                    }
+                } catch (_) { }
+
+                // Учитываем выбранный режим превью: PDF или HTML
+                if (this.previewMode === 'pdf') {
+                    this.setPreviewToUrl(decoded);
+                } else {
+                    // В HTML-режиме показываем редактируемое превью шаблона
+                    this.userData.template = visualTpl;
+                    // Подсветим выбор визуально
+                    document.querySelectorAll('.template-option').forEach(btn => {
+                        if (btn.dataset.template === visualTpl) {
+                            btn.classList.add('ring-2', 'ring-brand-400', 'border-brand-400');
+                        } else {
+                            btn.classList.remove('ring-2', 'ring-brand-400', 'border-brand-400');
+                        }
+                    });
+                    this.setPreviewSrc(visualTpl);
+                }
+
+                // Если одновременно передан визуальный шаблон — отметим выбор в UI
                 const visualSet = new Set(['modern', 'classic', 'minimal', 'creative', 'european', 'europass']);
                 if (template && visualSet.has(template)) {
                     this.selectTemplate(template);
-                    this.updateTemplateLabel();
                 }
+                this.updateTemplateLabel();
                 return;
             }
             // Если передан визуальный шаблон из страницы выбора — применяем его напрямую
@@ -1149,7 +1417,11 @@ class CVBuilder {
                     minimal: '/cv_templates/free-resume-example-entry-level.pdf'
                 };
                 if (pdfMap[template]) {
-                    this.setPreviewToUrl(pdfMap[template]);
+                    if (this.previewMode === 'pdf') {
+                        this.setPreviewToUrl(pdfMap[template]);
+                    } else {
+                        this.setPreviewSrc(template);
+                    }
                 } else {
                     this.setPreviewSrc(template);
                 }
@@ -1196,7 +1468,11 @@ class CVBuilder {
                     'entry-level': '/cv_templates/free-resume-example-entry-level.pdf'
                 };
                 if (docxToPdf[template]) {
-                    this.setPreviewToUrl(docxToPdf[template]);
+                    if (this.previewMode === 'pdf') {
+                        this.setPreviewToUrl(docxToPdf[template]);
+                    } else {
+                        this.setPreviewSrc(visualTpl);
+                    }
                 } else {
                     this.setPreviewSrc(visualTpl);
                 }
@@ -1645,6 +1921,32 @@ class CVBuilder {
         this.saveData(); // только локально; сервер — по кнопке
         this.ensurePreviewVisible();
         this.pushLivePreview();
+        this.applyPreviewForTemplate(templateName);
+    }
+
+    // Применяет iframe превью согласно текущему режиму и выбранному шаблону
+    applyPreviewForTemplate(template) {
+        try {
+            const pdfMap = {
+                classic: '/cv_templates/free-experienced-template-resume.pdf',
+                minimal: '/cv_templates/free-resume-example-entry-level.pdf'
+            };
+            if (this.previewMode === 'pdf' && pdfMap[template]) {
+                this.setPreviewToUrl(pdfMap[template]);
+            } else {
+                // В HTML-режиме открываем пер-шаблонную страницу
+                const frame = document.getElementById('live-preview-frame');
+                if (!frame) return;
+                const routeMap = {
+                    classic: '/templates/classic.html',
+                    minimal: '/templates/minimal.html'
+                };
+                const url = routeMap[template] || '/pages/cv-preview';
+                frame.src = `${url}`;
+                // отправим данные после короткой задержки (страница загрузится)
+                setTimeout(() => this.sendPreviewMessage(this.userData), 150);
+            }
+        } catch (_) { }
     }
 
     updateTemplateLabel() {

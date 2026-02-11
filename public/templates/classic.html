@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview · Classic</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/templates.css" />
+</head>
+<body class="tpl-classic">
+  <div class="page" id="page-root">
+    <div class="header row" id="header">
+      <div class="col" style="flex:1">
+        <div class="name" id="name">Имя Фамилия</div>
+        <div class="contacts" id="contacts"></div>
+      </div>
+      <div class="photo" id="photoWrap" style="border-radius:8px">
+        <img id="photo" alt="photo" />
+      </div>
+    </div>
+
+    <div class="content col">
+      <div class="section" id="employmentSec">
+        <div class="heading">Опыт работы</div>
+        <div id="employmentList" style="margin-top:8px"></div>
+      </div>
+      <div class="section" id="educationSec">
+        <div class="heading">Образование</div>
+        <div id="educationList" style="margin-top:8px"></div>
+      </div>
+      <div class="section" id="skillsSec">
+        <div class="heading">Навыки</div>
+        <div id="skillsList" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="/js/template-classic.js"></script>
+</body>
+</html>

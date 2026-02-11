@@ -103,9 +103,9 @@ router.post('/download-docx', async (req, res) => {
       templatePath = path.join(__dirname, '../../public/cv_templates/free-resume-example-entry-level.docx');
     } else {
       // Если шаблон не выбран, возвращаем заглушку
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Шаблон не выбран. Пожалуйста, выберите шаблон на странице создания резюме.' 
+      return res.status(400).json({
+        success: false,
+        message: 'Шаблон не выбран. Пожалуйста, выберите шаблон на странице создания резюме.'
       });
     }
 
@@ -185,6 +185,24 @@ router.post('/download-docx', async (req, res) => {
       qualities: userData.additionalSections?.qualities || '',
     };
 
+    // Дополнительные алиасы для совместимости с шаблонами c UPPERCASE-плейсхолдерами
+    // Начинаем с FIRSTNAME и LASTNAME, расширяем по необходимости
+    const upperAliases = {
+      FIRSTNAME: templateData.firstName,
+      LASTNAME: templateData.lastName,
+      EMAIL: templateData.email,
+      NUMBER: templateData.phone,
+      CITY: templateData.city,
+      ADDRESS: templateData.address,
+      POSTALCODE: templateData.postalCode,
+      JOBPOSITION: templateData.jobPosition,
+      WEBSITE: templateData.website,
+      LINKEDIN: templateData.linkedin,
+      BIRTHDATE: templateData.birthdate,
+      FULLNAME: [templateData.firstName, templateData.lastName].filter(Boolean).join(' ')
+    };
+    Object.assign(templateData, upperAliases);
+
     // Заполняем шаблон данными
     doc.setData(templateData);
 
@@ -192,10 +210,10 @@ router.post('/download-docx', async (req, res) => {
       doc.render();
     } catch (error) {
       console.error('Ошибка рендеринга шаблона:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Ошибка заполнения шаблона', 
-        error: error.message 
+      return res.status(500).json({
+        success: false,
+        message: 'Ошибка заполнения шаблона',
+        error: error.message
       });
     }
 
