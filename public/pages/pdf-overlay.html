@@ -11,14 +11,17 @@
         body {
             background: #f8fafc;
             height: 100%;
+            margin: 0;
         }
 
         #pages {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 20px;
-            padding: 16px;
+            gap: 12px;
+            padding: 0;
+            width: 100%;
+            max-width: 100%;
         }
 
         .page-wrap {
@@ -55,20 +58,21 @@
         }
     </style>
     <script>
+        // Tailwind CDN fallback
         (function () {
             if (!document.getElementById('tw-cdn-fallback')) {
-                const s = document.createElement('script');
+                var s = document.createElement('script');
                 s.id = 'tw-cdn-fallback';
                 s.src = 'https://cdn.tailwindcss.com';
                 document.head.appendChild(s);
             }
         })();
     </script>
-    <!-- PDF.js (UMD), html2canvas, jsPDF via jsDelivr -->
+    <!-- PDF.js (UMD), html2canvas, jsPDF -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script>
-        if (window['pdfjsLib']) {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        if (window && window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
         }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -80,28 +84,14 @@
     <div id="pages"></div>
 
     <script>
-        const state = {
-            src: null,
-            pages: [],
-            overlays: [],
-            scale: 1.3,
-            cvData: null,
-        };
+        var state = { src: null, pages: [], overlays: [], scale: 1.5, cvData: null, displayScale: 1.4 };
 
-        function getParam(name) {
-            const url = new URL(window.location.href);
-            return url.searchParams.get(name);
-        }
-
-        function toFileName(title) {
-            const base = (title || 'resume').toString().trim().replace(/[^\w\-]+/g, '_');
-            return base || 'resume';
-        }
+        function getParam(name) { var url = new URL(window.location.href); return url.searchParams.get(name); }
 
         function mapValue(key, data) {
             if (!data) return '';
-            const p = data.personalInfo || {};
-            const up = (s) => (s || '').toString();
+            var p = data.personalInfo || {};
+            var up = function (s) { return (s || '').toString(); };
             switch (key) {
                 case 'FIRSTNAME': return up(p['given-name'] || p.givenName || p.firstName);
                 case 'LASTNAME': return up(p['family-name'] || p.familyName || p.lastName);
@@ -115,199 +105,215 @@
                 case 'BIRTHDATE': return up(p.birthdate);
                 case 'SUMMARY': return up(p.summary || (data.additionalSections && data.additionalSections.profile));
                 case 'SKILLS': {
-                    const arr = Array.isArray(data.skills) ? data.skills : [];
-                    return arr.map(s => s.skill || s.name).filter(Boolean).join(', ');
+                    var arr = Array.isArray(data.skills) ? data.skills : [];
+                    return arr.map(function (s) { return s.skill || s.name; }).filter(Boolean).join(', ');
                 }
-                default:
-                    return '';
+                default: return '';
             }
         }
 
         function createOverlay(pageWrap, viewport, matches) {
-            const overlay = document.createElement('div');
+            var overlay = document.createElement('div');
             overlay.className = 'overlay-layer';
             pageWrap.appendChild(overlay);
-
-            matches.forEach(item => {
-                const { key, x, y, width, fontSize } = item;
-                const value = mapValue(key, state.cvData);
-                const el = document.createElement('div');
+            for (var i = 0; i < matches.length; i++) {
+                var item = matches[i];
+                var key = item.key, x = item.x, y = item.y, width = item.width, fontSize = item.fontSize;
+                var value = mapValue(key, state.cvData);
+                var el = document.createElement('div');
                 el.className = 'field';
-                const left = x * state.scale;
-                const top = (viewport.height - y) * state.scale - (fontSize * state.scale * 0.8);
-                el.style.left = `${left}px`;
-                el.style.top = `${Math.max(0, top)}px`;
-                el.style.fontSize = `${Math.max(10, fontSize * state.scale)}px`;
+                var left = x * state.scale;
+                var top = (viewport.height - y) * state.scale - (fontSize * state.scale * 0.8);
+                el.style.left = left + 'px';
+                el.style.top = Math.max(0, top) + 'px';
+                el.style.fontSize = Math.max(10, fontSize * state.scale) + 'px';
                 el.style.padding = '2px 4px';
                 el.textContent = value || '';
                 overlay.appendChild(el);
-            });
-
+            }
             state.overlays.push(overlay);
         }
 
         async function renderPdf() {
-            const src = state.src;
+            var src = state.src;
             if (!src || !window.pdfjsLib) return;
-            const container = document.getElementById('pages');
+            var container = document.getElementById('pages');
             container.innerHTML = '';
-            state.pages = [];
-            state.overlays = [];
+            state.pages = []; state.overlays = [];
+            var loadingTask = window.pdfjsLib.getDocument(src);
+            var pdf = await loadingTask.promise;
+            var total = pdf.numPages;
 
-            const loadingTask = window.pdfjsLib.getDocument(src);
-            const pdf = await loadingTask.promise;
-            const total = pdf.numPages;
-
-            for (let n = 1; n <= total; n++) {
-                const page = await pdf.getPage(n);
-                const viewport = page.getViewport({ scale: state.scale });
-                const pageWrap = document.createElement('div');
+            // Display scaling (CSS transform) for visual zoom independent of PDF render scale
+            var vscaleParam = parseFloat(getParam('vscale') || '');
+            var vfitParam = getParam('vfit') || 'width'; // default to width
+            if (!isNaN(vscaleParam) && vscaleParam > 0) {
+                state.displayScale = vscaleParam;
+            } else if (vfitParam === 'width') {
+                try {
+                    var first = await pdf.getPage(1);
+                    var base = first.getViewport({ scale: state.scale });
+                    var rect = container.getBoundingClientRect();
+                    var avail = (rect && rect.width ? rect.width : window.innerWidth || base.width);
+                    state.displayScale = Math.max(0.8, Math.min(3.5, avail / base.width));
+                } catch (e) { state.displayScale = 1; }
+            } else {
+                state.displayScale = 1;
+            }
+            for (var n = 1; n <= total; n++) {
+                var page = await pdf.getPage(n);
+                var viewport = page.getViewport({ scale: state.scale });
+                var pageWrap = document.createElement('div');
                 pageWrap.className = 'page-wrap';
-                pageWrap.style.width = `${viewport.width}px`;
-                pageWrap.style.height = `${viewport.height}px`;
+                pageWrap.style.width = viewport.width + 'px';
+                pageWrap.style.height = viewport.height + 'px';
+                pageWrap.style.transform = 'scale(' + state.displayScale + ')';
+                pageWrap.style.transformOrigin = 'top left';
 
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
+                // Frame to reserve scaled space so layout matches visual scale
+                var frame = document.createElement('div');
+                frame.style.width = Math.floor(viewport.width * state.displayScale) + 'px';
+                frame.style.height = Math.floor(viewport.height * state.displayScale) + 'px';
+                frame.style.position = 'relative';
+                var canvas = document.createElement('canvas');
+                var ctx = canvas.getContext('2d');
                 canvas.width = Math.floor(viewport.width);
                 canvas.height = Math.floor(viewport.height);
                 pageWrap.appendChild(canvas);
-
-                container.appendChild(pageWrap);
-                state.pages.push({ page, viewport, canvas, pageWrap });
-
-                await page.render({ canvasContext: ctx, viewport }).promise;
-
-                // Try to detect placeholders like {{FIRSTNAME}}
-                const textContent = await page.getTextContent();
-                const items = textContent.items || [];
-                const matches = [];
-                const re = /\{\{\s*([A-Z_]+)\s*\}\}/g;
-                for (const it of items) {
-                    const str = String(it.str || it.text || '');
-                    let m;
+                frame.appendChild(pageWrap);
+                container.appendChild(frame);
+                state.pages.push({ page: page, viewport: viewport, canvas: canvas, pageWrap: pageWrap, frame: frame });
+                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                // Extract placeholders like {{FIRSTNAME}}
+                var textContent = await page.getTextContent();
+                var items = textContent.items || [];
+                var matches = [];
+                var re = /\{\{\s*([A-Z_]+)\s*\}\}/g;
+                for (var k = 0; k < items.length; k++) {
+                    var it = items[k];
+                    var str = String(it.str || it.text || '');
+                    var m;
                     while ((m = re.exec(str)) !== null) {
-                        const key = m[1];
-                        const tf = it.transform || [1, 0, 0, 1, 0, 0];
-                        const a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
-                        const fontSize = Math.hypot(a, b) || 12;
-                        const width = (it.width || (str.length * fontSize * 0.6));
-                        matches.push({ key, x: e, y: f, width, fontSize });
+                        var key = m[1];
+                        var tf = it.transform || [1, 0, 0, 1, 0, 0];
+                        var a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
+                        var fontSize = Math.hypot(a, b) || 12;
+                        var width = (it.width || (str.length * fontSize * 0.6));
+                        matches.push({ key: key, x: e, y: f, width: width, fontSize: fontSize });
                     }
                 }
-                if (matches.length) {
-                    createOverlay(pageWrap, viewport, matches);
-                }
+                if (matches.length) createOverlay(pageWrap, viewport, matches);
             }
-
-            try { window.parent.postMessage({ type: 'cv-ready' }, window.location.origin); } catch (_) { }
+            try { window.parent.postMessage({ type: 'cv-ready' }, window.location.origin); } catch (e) { }
         }
 
         function updateOverlays() {
-            // Re-render overlays with current cvData
-            state.overlays.forEach(ov => ov.remove());
+            for (var i = 0; i < state.overlays.length; i++) { state.overlays[i].remove(); }
             state.overlays = [];
-            state.pages.forEach(({ page, viewport, pageWrap }) => {
-                // For simplicity, re-extract placeholders per page
-                page.getTextContent().then(textContent => {
-                    const items = textContent.items || [];
-                    const matches = [];
-                    const re = /\{\{\s*([A-Z_]+)\s*\}\}/g;
-                    for (const it of items) {
-                        const str = String(it.str || it.text || '');
-                        let m;
+            state.pages.forEach(function (p) {
+                p.page.getTextContent().then(function (textContent) {
+                    var items = textContent.items || [];
+                    var matches = [];
+                    var re = /\{\{\s*([A-Z_]+)\s*\}\}/g;
+                    for (var k = 0; k < items.length; k++) {
+                        var it = items[k];
+                        var str = String(it.str || it.text || '');
+                        var m;
                         while ((m = re.exec(str)) !== null) {
-                            const key = m[1];
-                            const tf = it.transform || [1, 0, 0, 1, 0, 0];
-                            const a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
-                            const fontSize = Math.hypot(a, b) || 12;
-                            const width = (it.width || (str.length * fontSize * 0.6));
-                            matches.push({ key, x: e, y: f, width, fontSize });
+                            var key = m[1];
+                            var tf = it.transform || [1, 0, 0, 1, 0, 0];
+                            var a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
+                            var fontSize = Math.hypot(a, b) || 12;
+                            var width = (it.width || (str.length * fontSize * 0.6));
+                            matches.push({ key: key, x: e, y: f, width: width, fontSize: fontSize });
                         }
                     }
-                    if (matches.length) {
-                        createOverlay(pageWrap, viewport, matches);
-                    }
-                }).catch(() => { });
+                    if (matches.length) createOverlay(p.pageWrap, p.viewport, matches);
+                }).catch(function () { });
             });
         }
 
         async function exportPng() {
             try {
-                // Export first page including overlays via html2canvas
-                const first = state.pages[0];
+                var first = state.pages[0];
                 if (!first) throw new Error('Нет страниц для экспорта');
-                // Снижаем размер: меньше scale и JPEG вместо PNG
-                const shot = await html2canvas(first.pageWrap, { scale: 1.5, backgroundColor: '#ffffff' });
-                const dataUrl = shot.toDataURL('image/jpeg', 0.9);
-                window.parent.postMessage({ type: 'export-png-result', dataUrl }, window.location.origin);
+                var shot = await html2canvas(first.frame || first.pageWrap, { scale: 1.5, backgroundColor: '#ffffff' });
+                var dataUrl = shot.toDataURL('image/jpeg', 0.9);
+                window.parent.postMessage({ type: 'export-png-result', dataUrl: dataUrl }, window.location.origin);
             } catch (e) {
-                window.parent.postMessage({ type: 'export-png-result', dataUrl: null, error: e?.message }, window.location.origin);
+                window.parent.postMessage({ type: 'export-png-result', dataUrl: null, error: (e && e.message) }, window.location.origin);
             }
         }
 
         async function exportPdf() {
             try {
-                const { jsPDF } = window.jspdf || {};
+                var jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : (window.jspdf || {}).jsPDF;
                 if (!jsPDF) throw new Error('jsPDF не загружен');
-                const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-                for (let i = 0; i < state.pages.length; i++) {
-                    const p = state.pages[i];
-                    const shot = await html2canvas(p.pageWrap, { scale: 2, backgroundColor: '#ffffff' });
-                    const imgData = shot.toDataURL('image/png');
-                    const pageWidth = pdf.internal.pageSize.getWidth();
-                    const pageHeight = pdf.internal.pageSize.getHeight();
-                    // Fit image into page
+                var pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+                for (var i = 0; i < state.pages.length; i++) {
+                    var p = state.pages[i];
+                    var shot = await html2canvas(p.frame || p.pageWrap, { scale: 2, backgroundColor: '#ffffff' });
+                    var imgData = shot.toDataURL('image/png');
+                    var pageWidth = pdf.internal.pageSize.getWidth();
+                    var pageHeight = pdf.internal.pageSize.getHeight();
                     pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
                     if (i < state.pages.length - 1) pdf.addPage();
                 }
-                const blob = pdf.output('blob');
-                const url = URL.createObjectURL(blob);
-                window.parent.postMessage({ type: 'export-pdf-result', url }, window.location.origin);
+                var blob = pdf.output('blob');
+                var url = URL.createObjectURL(blob);
+                window.parent.postMessage({ type: 'export-pdf-result', url: url }, window.location.origin);
             } catch (e) {
-                window.parent.postMessage({ type: 'export-pdf-result', url: null, error: e?.message }, window.location.origin);
+                window.parent.postMessage({ type: 'export-pdf-result', url: null, error: (e && e.message) }, window.location.origin);
             }
         }
 
         async function exportStrictHtml() {
             try {
-                // Строим текстовую HTML-верстку с абсолютным позиционированием из PDF textContent
-                const pageHtmlParts = [];
-                for (let i = 0; i < state.pages.length; i++) {
-                    const { page, viewport } = state.pages[i];
-                    const textContent = await page.getTextContent();
-                    const items = textContent.items || [];
-                    const lines = [`<div class="page-wrap" style="position:relative;width:${Math.floor(viewport.width)}px;height:${Math.floor(viewport.height)}px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)">`];
-                    for (const it of items) {
-                        const str = String(it.str || it.text || '').replace(/[\u0000-\u001F]/g, '');
+                var pageHtmlParts = [];
+                for (var i = 0; i < state.pages.length; i++) {
+                    var page = state.pages[i].page;
+                    var viewport = state.pages[i].viewport;
+                    var textContent = await page.getTextContent();
+                    var items = textContent.items || [];
+                    var styleMap = textContent.styles || {};
+                    var displayFactor = state.displayScale || 1;
+                    var renderFactor = state.scale || 1;
+                    var pageWidth = Math.floor(viewport.width * displayFactor);
+                    var pageHeight = Math.floor(viewport.height * displayFactor);
+                    var lines = ["<div class=\"page-wrap\" style=\"position:relative;width:" + pageWidth + "px;height:" + pageHeight + "px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)\">"];
+                    for (var k = 0; k < items.length; k++) {
+                        var it = items[k];
+                        var str = String(it.str || it.text || '').replace(/[\u0000-\u001F]/g, '');
                         if (!str.trim()) continue;
-                        const tf = it.transform || [1, 0, 0, 1, 0, 0];
-                        const a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
-                        const fontSize = Math.max(8, Math.hypot(a, b) || 12);
-                        const left = e;
-                        const top = (viewport.height - f) - fontSize * 0.8;
-                        const safe = str
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;');
-                        lines.push(`<span style="position:absolute;left:${Math.round(left)}px;top:${Math.round(Math.max(0, top))}px;font-size:${Math.round(fontSize)}px;white-space:pre;">${safe}</span>`);
+                        var tf = it.transform || [1, 0, 0, 1, 0, 0];
+                        var a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
+                        var fontSizeBase = Math.max(8, Math.abs(d) || Math.hypot(a, b) || 12);
+                        var st = styleMap[it.fontName] || {};
+                        var family = st.fontFamily ? String(st.fontFamily) : 'Inter, system-ui, Arial, sans-serif';
+                        var ascent = typeof st.ascent === 'number' ? st.ascent : 0.8;
+                        var weight = /bold|black|heavy|semibold|medium/i.test(String(it.fontName || '')) ? (/bold|black|heavy/i.test(it.fontName) ? 700 : 600) : 400;
+                        var fontStyle = /italic|oblique/i.test(String(it.fontName || '')) ? 'italic' : 'normal';
+                        // Apply both render and visual display scaling so HTML matches PDF export
+                        var left = e * renderFactor * displayFactor;
+                        var topRaw = (viewport.height - (f * renderFactor)) - (fontSizeBase * renderFactor * ascent);
+                        var top = topRaw * displayFactor;
+                        var fontSize = Math.round(fontSizeBase * renderFactor * displayFactor);
+                        var safe = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        lines.push("<span style=\"position:absolute;left:" + Math.round(left) + "px;top:" + Math.round(Math.max(0, top)) + "px;font-size:" + fontSize + "px;white-space:pre;line-height:" + Math.round(fontSize * 1.05) + "px;font-family:" + family + ";font-weight:" + weight + ";font-style:" + fontStyle + ";\">" + safe + "</span>");
                     }
                     lines.push('</div>');
                     pageHtmlParts.push(lines.join(''));
                 }
-                const html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF → HTML</title><style>html,body{margin:0;padding:0;background:#f8fafc;font-family:Inter,system-ui,Arial,sans-serif}#pages{display:flex;flex-direction:column;align-items:center;gap:20px;padding:16px}</style></head><body><div id="pages">${pageHtmlParts.join('')}</div></body></html>`;
-                window.parent.postMessage({ type: 'export-strict-html-result', html }, window.location.origin);
+                var html = "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>PDF → HTML</title><style>html,body{margin:0;padding:0;background:#f8fafc;font-family:Inter,system-ui,Arial,sans-serif}#pages{display:flex;flex-direction:column;align-items:center;gap:12px;padding:0;width:100%;max-width:100%}</style></head><body><div id=\"pages\">" + pageHtmlParts.join('') + "</div></body></html>";
+                window.parent.postMessage({ type: 'export-strict-html-result', html: html }, window.location.origin);
             } catch (e) {
-                window.parent.postMessage({ type: 'export-strict-html-result', html: null, error: e?.message }, window.location.origin);
+                window.parent.postMessage({ type: 'export-strict-html-result', html: null, error: (e && e.message) }, window.location.origin);
             }
         }
 
-        window.addEventListener('message', (e) => {
-            const msg = e?.data;
-            if (!msg) return;
-            if (msg.type === 'cv-data') {
-                state.cvData = msg.payload || msg.data || null;
-                updateOverlays();
-            }
+        window.addEventListener('message', function (e) {
+            var msg = e && e.data; if (!msg) return;
+            if (msg.type === 'cv-data') { state.cvData = msg.payload || msg.data || null; updateOverlays(); }
             if (msg.type === 'export-png') exportPng();
             if (msg.type === 'export-pdf') exportPdf();
             if (msg.type === 'export-strict-html') exportStrictHtml();
@@ -316,19 +322,18 @@
         (async function init() {
             state.src = getParam('src');
             if (!state.src) {
-                const cont = document.getElementById('pages');
-                const note = document.createElement('div');
+                var cont = document.getElementById('pages');
+                var note = document.createElement('div');
                 note.className = 'text-gray-700 text-sm';
                 note.textContent = 'Не указан источник PDF. Добавьте ?src=/uploads/your.pdf';
                 cont.appendChild(note);
-                try { window.parent.postMessage({ type: 'cv-ready' }, window.location.origin); } catch (_) { }
+                try { window.parent.postMessage({ type: 'cv-ready' }, window.location.origin); } catch (e) { }
                 return;
             }
-            try {
-                await renderPdf();
-            } catch (e) {
-                console.error('PDF render error:', e);
-            }
+            try { await renderPdf(); } catch (e) { console.error('PDF render error:', e); }
+
+
+
         })();
     </script>
 </body>

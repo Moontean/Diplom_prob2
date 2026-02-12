@@ -1090,7 +1090,8 @@ app.get('/pages/cv-preview', requireAuth, (req, res) => {
 });
 
 // Страница предпросмотра PDF с оверлеями
-app.get('/pages/pdf-overlay', requireAuth, (req, res) => {
+// Страница предпросмотра PDF с оверлеями должна быть доступна публично
+app.get('/pages/pdf-overlay', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'pdf-overlay.html'));
 });
 

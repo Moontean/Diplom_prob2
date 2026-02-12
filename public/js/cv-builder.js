@@ -159,18 +159,18 @@ class CVBuilder {
         if (clearFormBtn) {
             clearFormBtn.addEventListener('click', () => {
                 this.clearAllFields();
-                optionsMenu?.classList.add('hidden');
+                if (optionsMenu) optionsMenu.classList.add('hidden');
             });
         }
         if (saveFromOptionsBtn) {
             saveFromOptionsBtn.addEventListener('click', async () => {
                 await this.saveData({ immediate: true });
-                optionsMenu?.classList.add('hidden');
+                if (optionsMenu) optionsMenu.classList.add('hidden');
             });
         }
         if (addTestResultsBtn) {
             addTestResultsBtn.addEventListener('click', async () => {
-                optionsMenu?.classList.add('hidden');
+                if (optionsMenu) optionsMenu.classList.add('hidden');
                 try {
                     let payload = null;
                     // Сначала пробуем с сервера
@@ -180,7 +180,7 @@ class CVBuilder {
                         return;
                     }
                     const data = await res.json();
-                    if (res.ok && data?.success) {
+                    if (res.ok && data && data.success) {
                         payload = data.result;
                     }
 
@@ -202,7 +202,7 @@ class CVBuilder {
                     }
 
                     if (!payload || typeof payload.score !== 'number') {
-                        alert(data?.message || 'Нет сохранённых результатов теста. Пройдите тест и сохраните результат (>65%).');
+                        alert((data && data.message) || 'Нет сохранённых результатов теста. Пройдите тест и сохраните результат (>65%).');
                         return;
                     }
 
@@ -243,19 +243,24 @@ class CVBuilder {
         if (openSamplePdfBtn) {
             openSamplePdfBtn.addEventListener('click', () => {
                 try {
-                    const template = this.userData?.template || 'modern';
+                    const template = (this.userData && this.userData.template) || 'modern';
                     const pdfMap = {
                         classic: '/cv_templates/free-experienced-template-resume.pdf',
                         minimal: '/cv_templates/free-resume-example-entry-level.pdf'
                     };
                     const url = pdfMap[template];
-                    if (url) {
-                        window.open(url, '_blank', 'noopener');
+                    const frame = document.getElementById('live-preview-frame');
+                    if (url && frame) {
+                        const abs = url.startsWith('/') ? url : `/cv_templates/${url}`;
+                        frame.src = `/pages/pdf-overlay?src=${encodeURIComponent(abs)}`;
+                        // отправим данные спустя короткую задержку
+                        setTimeout(() => this.sendPreviewMessage(this.userData), 200);
+                        this.ensurePreviewVisible();
                     } else {
                         alert('Для выбранного шаблона пример PDF отсутствует');
                     }
                 } catch (_) { }
-                optionsMenu?.classList.add('hidden');
+                if (optionsMenu) optionsMenu.classList.add('hidden');
             });
         }
 
@@ -288,10 +293,10 @@ class CVBuilder {
                         setTimeout(() => this.sendPreviewMessage(this.userData), 200);
                         this.ensurePreviewVisible();
                     }
-                    optionsMenu?.classList.add('hidden');
+                    if (optionsMenu) optionsMenu.classList.add('hidden');
                 } catch (err) {
                     console.error('Upload template error:', err);
-                    alert(err?.message || 'Ошибка загрузки шаблона');
+                    alert((err && err.message) || 'Ошибка загрузки шаблона');
                 } finally {
                     // reset input value to allow re-uploading same file later
                     e.target.value = '';
@@ -313,7 +318,7 @@ class CVBuilder {
                     frame.contentWindow.postMessage({ type: 'export-png' }, window.location.origin);
                     const dataUrl = await new Promise((resolve, reject) => {
                         const handler = (e) => {
-                            const msg = e?.data;
+                            const msg = e && e.data;
                             if (!msg || msg.type !== 'export-png-result') return;
                             window.removeEventListener('message', handler);
                             if (msg.error) reject(new Error(msg.error)); else resolve(msg.dataUrl);
@@ -332,15 +337,16 @@ class CVBuilder {
                         body: JSON.stringify({ imageDataUrl: dataUrl, title: this.getDocumentTitle() || 'Resume' })
                     });
                     if (resp.status === 401) { this.redirectToAuthRequired(); return; }
-                    const result = await resp.json().catch(() => ({ success: false }));
-                    if (!resp.ok || !result?.success || !result?.url) throw new Error(result?.message || 'AI конвертация не удалась');
+                    let result;
+                    try { result = await resp.json(); } catch (_) { result = { success: false }; }
+                    if (!resp.ok || !result || !result.success || !result.url) throw new Error((result && result.message) || 'AI конвертация не удалась');
                     // Заменяем превью на сгенерированный HTML
                     frame.src = result.url;
                     this.ensurePreviewVisible();
-                    optionsMenu?.classList.add('hidden');
+                    if (optionsMenu) optionsMenu.classList.add('hidden');
                 } catch (err) {
                     console.error('AI HTML error:', err);
-                    alert(err?.message || 'Не удалось сконвертировать PDF');
+                    alert((err && err.message) || 'Не удалось сконвертировать PDF');
                 }
             });
         }
@@ -353,6 +359,26 @@ class CVBuilder {
                         alert('Предпросмотр не готов');
                         return;
                     }
+                    // Дождаться готовности iframe (pdf-overlay отправляет cv-ready)
+                    const waitReady = () => new Promise((resolve) => {
+                        let resolved = false;
+                        const handler = (e) => {
+                            const msg = e?.data;
+                            if (msg && msg.type === 'cv-ready') {
+                                resolved = true;
+                                window.removeEventListener('message', handler);
+                                resolve(true);
+                            }
+                        };
+                        window.addEventListener('message', handler);
+                        setTimeout(() => {
+                            if (!resolved) {
+                                window.removeEventListener('message', handler);
+                                resolve(false);
+                            }
+                        }, 8000);
+                    });
+                    await waitReady();
                     // Пытаемся сначала строгую AI-конвертацию
                     this.sendPreviewMessage(this.userData);
                     frame.contentWindow.postMessage({ type: 'export-png' }, window.location.origin);
@@ -376,13 +402,14 @@ class CVBuilder {
                         body: JSON.stringify({ imageDataUrl: dataUrl, title: this.getDocumentTitle() || 'Resume' })
                     });
                     if (resp.status === 401) { this.redirectToAuthRequired(); return; }
-                    let result = await resp.json().catch(() => ({ success: false }));
-                    if (!resp.ok || !result?.success || !result?.url) {
+                    let result;
+                    try { result = await resp.json(); } catch (_) { result = { success: false }; }
+                    if (!resp.ok || !result || !result.success || !result.url) {
                         // Если AI не вернул валидный HTML, выполняем детерминированный фолбэк: экспорт текста из PDF
                         frame.contentWindow.postMessage({ type: 'export-strict-html' }, window.location.origin);
                         const html = await new Promise((resolve, reject) => {
                             const handler = (e) => {
-                                const msg = e?.data;
+                                const msg = e && e.data;
                                 if (!msg || msg.type !== 'export-strict-html-result') return;
                                 window.removeEventListener('message', handler);
                                 if (msg.error) reject(new Error(msg.error)); else resolve(msg.html);
@@ -400,15 +427,15 @@ class CVBuilder {
                             body: JSON.stringify({ html, title: this.getDocumentTitle() || 'Resume' })
                         });
                         if (resp.status === 401) { this.redirectToAuthRequired(); return; }
-                        result = await resp.json().catch(() => ({ success: false }));
-                        if (!resp.ok || !result?.success || !result?.url) throw new Error(result?.message || 'Сохранение HTML не удалось');
+                        try { result = await resp.json(); } catch (_) { result = { success: false }; }
+                        if (!resp.ok || !result || !result.success || !result.url) throw new Error((result && result.message) || 'Сохранение HTML не удалось');
                     }
                     frame.src = result.url;
                     this.ensurePreviewVisible();
-                    optionsMenu?.classList.add('hidden');
+                    if (optionsMenu) optionsMenu.classList.add('hidden');
                 } catch (err) {
                     console.error('AI HTML strict error:', err);
-                    alert(err?.message || 'Не удалось получить текстовый HTML');
+                    alert((err && err.message) || 'Не удалось получить текстовый HTML');
                 }
             });
         }
@@ -424,9 +451,9 @@ class CVBuilder {
                 try { localStorage.setItem('previewMode', this.previewMode); } catch (_) { }
                 refreshLabel();
                 // Перепривязать превью под текущий шаблон
-                const tpl = this.userData?.template || 'modern';
+                const tpl = (this.userData && this.userData.template) || 'modern';
                 this.applyPreviewForTemplate(tpl);
-                optionsMenu?.classList.add('hidden');
+                if (optionsMenu) optionsMenu.classList.add('hidden');
             });
         }
 
@@ -1994,7 +2021,9 @@ class CVBuilder {
             const isDocx = /\.docx(?:$|\?)/i.test(url);
             const isPdf = /\.pdf(?:$|\?)/i.test(url);
             if (isPdf) {
-                frame.src = url.startsWith('/') ? url : `/cv_templates/${url}`;
+                const abs = url.startsWith('/') ? url : `/cv_templates/${url}`;
+                frame.src = `/pages/pdf-overlay?src=${encodeURIComponent(abs)}`;
+                setTimeout(() => this.sendPreviewMessage(this.userData), 200);
             } else if (isDocx) {
                 // Для DOCX показываем информативную заглушку внутри cv-preview
                 const abs = url.startsWith('/') ? url : `/cv_templates/${url}`;
