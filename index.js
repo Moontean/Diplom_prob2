@@ -8,6 +8,14 @@ const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const fs = require('fs');
+
+// ===== Global error handlers to avoid silent exits =====
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
+});
 let rateLimit;
 try {
   rateLimit = require('express-rate-limit');
@@ -32,8 +40,18 @@ const { cvSchema } = require('./services/cvValidation');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
-const Stripe = require('stripe');
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+let stripe = null;
+let stripeInitError = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  try {
+    const Stripe = require('stripe');
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  } catch (err) {
+    stripeInitError = err;
+    console.warn('⚠️ Stripe initialization failed. Disabling Stripe. Reason:', err.message);
+    stripe = null;
+  }
+}
 
 // ===== Stripe Webhook (должен идти до JSON парсера) =====
 // Используем express.raw для проверки подписи
@@ -134,11 +152,40 @@ app.use(session({
 }));
 
 app.use(express.static(path.join(__dirname, 'public')));
+// В dev-режиме также публикуем каталог uploads для доступа к сгенерированным файлами
+if (!isProd) {
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+}
 
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl}`);
   next();
 });
+
+// ====== Простая middleware авторизации по сессии ======
+function requireAuth(req, res, next) {
+  try {
+    if (req.session && req.session.userId) return next();
+    return res.status(401).json({ success: false, message: 'Требуется авторизация' });
+  } catch (e) {
+    return res.status(401).json({ success: false, message: 'Ошибка авторизации' });
+  }
+}
+
+// ====== Валидация CV через Zod-схему ======
+function validateCv(req, res, next) {
+  try {
+    const payload = (req.body && req.body.cv) ? req.body.cv : req.body;
+    const parsed = cvSchema.safeParse(payload || {});
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: 'Некорректные данные CV', errors: parsed.error.issues });
+    }
+    req.validatedCv = parsed.data;
+    next();
+  } catch (e) {
+    return res.status(400).json({ success: false, message: 'Ошибка валидации CV' });
+  }
+}
 
 const generateLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -831,7 +878,12 @@ function validateCv(req, res, next) {
 }
 
 // Защищённая раздача загруженных файлов
-app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
+// In development, allow public access to uploads to simplify previewing
+if (!isProd) {
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+} else {
+  app.use('/uploads', requireAuth, express.static(path.join(__dirname, 'uploads')));
+}
 
 // Загрузка пользовательского PDF-шаблона для предпросмотра
 app.post('/api/templates/upload', requireAuth, upload.single('template'), (req, res) => {
@@ -1095,7 +1147,7 @@ app.get('/pages/pdf-overlay', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'pdf-overlay.html'));
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
   console.log(`📊 База данных: ${isDBConnected ? 'MongoDB подключена' : 'Работа в режиме in-memory'}`);
   // console.log('📄 Доступные маршруты:');
@@ -1696,11 +1748,22 @@ app.post('/api/templates/ai-html-strict', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Некорректные данные изображения' });
     }
     let html;
+    let htmlType = 'text';
     try {
       html = await generateHtmlFromImage({ imageBase64: imageDataUrl, title: title || 'Resume', strict: true });
     } catch (e) {
-      return res.status(422).json({ success: false, message: 'Ошибка ИИ: ' + (e?.message || 'unknown') });
+      console.warn('AI strict HTML failed, applying direct fallback:', e?.message || e);
+      // Прямой фолбэк: формируем HTML с изображением без повторного вызова AI
+      const safeTitle = String(title || 'resume').trim() || 'resume';
+      html = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>html,body{margin:0;padding:0;background:#f8fafc;font-family:Inter,system-ui,Arial,sans-serif}#page-container{display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px}.page-wrap{position:relative;width:fit-content;box-shadow:0 2px 12px rgba(0,0,0,.12);background:#fff}.page-img{display:block;max-width:100%;height:auto}</style></head><body><div id="page-container"><div class="page-wrap"><img class="page-img" src="${imageDataUrl}" alt="${safeTitle}"></div></div></body></html>`;
+      htmlType = 'image';
     }
+    // Классифицируем тип HTML: текстовый, SVG или изображение
+    try {
+      const hasSvg = /<svg[\s>]/i.test(html);
+      const hasImgData = /<img[^>]+src=["']data:image\//i.test(html);
+      htmlType = hasSvg ? 'svg' : (hasImgData ? 'image' : 'text');
+    } catch (_) { htmlType = 'text'; }
     const genDir = path.join(__dirname, 'uploads', 'generated');
     if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
     const safeTitle = String(title || 'resume').trim().replace(/[^\w\-]+/g, '_').toLowerCase();
@@ -1708,7 +1771,7 @@ app.post('/api/templates/ai-html-strict', requireAuth, async (req, res) => {
     const filePath = path.join(genDir, fileName);
     await fs.promises.writeFile(filePath, html, 'utf8');
     const url = `/uploads/generated/${fileName}`;
-    return res.json({ success: true, url, fileName });
+    return res.json({ success: true, url, fileName, type: htmlType });
   } catch (err) {
     console.error('Ошибка AI HTML strict:', err);
     res.status(500).json({ success: false, message: 'Не удалось сгенерировать текстовый HTML' });
@@ -1735,5 +1798,14 @@ app.post('/api/templates/save-html', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Ошибка сохранения HTML:', err);
     return res.status(500).json({ success: false, message: 'Не удалось сохранить HTML' });
+  }
+});
+
+// ===== Запуск HTTP-сервера (уже выполнен выше). Доп. обработчик ошибок =====
+
+server.on('error', (err) => {
+  console.error('❌ Server listen error:', err);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Порт ${PORT} уже занят. Измените PORT в .env или освободите порт.`);
   }
 });

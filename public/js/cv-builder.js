@@ -379,6 +379,23 @@ class CVBuilder {
                         }, 8000);
                     });
                     await waitReady();
+                    // Если оверлей сообщает о проблеме с PDF, покажем подсказку
+                    const pdfErrorCheck = () => new Promise((resolve) => {
+                        let timer;
+                        const handler = (e) => {
+                            const msg = e?.data;
+                            if (msg && msg.type === 'pdf-error') {
+                                window.removeEventListener('message', handler);
+                                clearTimeout(timer);
+                                alert('Не удалось открыть PDF шаблон. Убедитесь, что путь доступен.');
+                                resolve(true);
+                            }
+                        };
+                        window.addEventListener('message', handler);
+                        timer = setTimeout(() => { window.removeEventListener('message', handler); resolve(false); }, 1500);
+                    });
+                    const hadPdfError = await pdfErrorCheck();
+                    if (hadPdfError) return;
                     // Пытаемся сначала строгую AI-конвертацию
                     this.sendPreviewMessage(this.userData);
                     frame.contentWindow.postMessage({ type: 'export-png' }, window.location.origin);
@@ -404,22 +421,52 @@ class CVBuilder {
                     if (resp.status === 401) { this.redirectToAuthRequired(); return; }
                     let result;
                     try { result = await resp.json(); } catch (_) { result = { success: false }; }
-                    if (!resp.ok || !result || !result.success || !result.url) {
-                        // Если AI не вернул валидный HTML, выполняем детерминированный фолбэк: экспорт текста из PDF
-                        frame.contentWindow.postMessage({ type: 'export-strict-html' }, window.location.origin);
-                        const html = await new Promise((resolve, reject) => {
-                            const handler = (e) => {
-                                const msg = e && e.data;
-                                if (!msg || msg.type !== 'export-strict-html-result') return;
-                                window.removeEventListener('message', handler);
-                                if (msg.error) reject(new Error(msg.error)); else resolve(msg.html);
-                            };
-                            window.addEventListener('message', handler);
-                            setTimeout(() => {
-                                window.removeEventListener('message', handler);
-                                reject(new Error('Не удалось получить текстовый HTML'));
-                            }, 10000);
-                        });
+                    const needFallback = (!resp.ok || !result || !result.success || !result.url || result.type === 'image');
+                    if (needFallback) {
+                        // Приоритет: векторный HTML (SVG/текст), затем – текстовый PNG-фолбэк как последний шанс
+                        let html = null;
+                        try {
+                            frame.contentWindow.postMessage({ type: 'export-strict-html-vector' }, window.location.origin);
+                            html = await new Promise((resolve, reject) => {
+                                const handler = (e) => {
+                                    const msg = e && e.data;
+                                    if (!msg || msg.type !== 'export-strict-html-vector-result') return;
+                                    window.removeEventListener('message', handler);
+                                    if (msg.error) reject(new Error(msg.error)); else resolve(msg.html);
+                                };
+                                window.addEventListener('message', handler);
+                                setTimeout(() => {
+                                    window.removeEventListener('message', handler);
+                                    reject(new Error('Не удалось получить векторный HTML'));
+                                }, 10000);
+                            });
+                        } catch (vectorErr) {
+                            console.warn('Vector export failed, fallback to canvas HTML:', vectorErr?.message || vectorErr);
+                        }
+
+                        if (!html) {
+                            frame.contentWindow.postMessage({ type: 'export-strict-html' }, window.location.origin);
+                            html = await new Promise((resolve, reject) => {
+                                const handler = (e) => {
+                                    const msg = e && e.data;
+                                    if (!msg || msg.type !== 'export-strict-html-result') return;
+                                    window.removeEventListener('message', handler);
+                                    if (msg.error) {
+                                        reject(new Error(msg.error));
+                                    } else if (!msg.html || msg.html.length < 200) {
+                                        reject(new Error('Пустой или некорректный HTML от export-strict-html'));
+                                    } else {
+                                        resolve(msg.html);
+                                    }
+                                };
+                                window.addEventListener('message', handler);
+                                setTimeout(() => {
+                                    window.removeEventListener('message', handler);
+                                    reject(new Error('Не удалось получить текстовый HTML (таймаут)'));
+                                }, 10000);
+                            });
+                        }
+
                         if (!html) throw new Error('Пустой HTML');
                         resp = await fetch('/api/templates/save-html', {
                             method: 'POST',

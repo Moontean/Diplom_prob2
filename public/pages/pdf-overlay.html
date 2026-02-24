@@ -57,17 +57,7 @@
             opacity: .85;
         }
     </style>
-    <script>
-        // Tailwind CDN fallback
-        (function () {
-            if (!document.getElementById('tw-cdn-fallback')) {
-                var s = document.createElement('script');
-                s.id = 'tw-cdn-fallback';
-                s.src = 'https://cdn.tailwindcss.com';
-                document.head.appendChild(s);
-            }
-        })();
-    </script>
+    <!-- Tailwind CDN fallback был удалён, чтобы избежать предупреждений в продакшене -->
     <!-- PDF.js (UMD), html2canvas, jsPDF -->
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script>
@@ -84,7 +74,24 @@
     <div id="pages"></div>
 
     <script>
-        var state = { src: null, pages: [], overlays: [], scale: 1.5, cvData: null, displayScale: 1.4 };
+        var state = {
+            src: null,
+            pages: [],
+            overlays: [],
+            scale: 1.5,
+            cvData: null,
+            displayScale: 1.4,
+            useSvg: false,
+            updatingOverlays: false,
+            pendingOverlayUpdate: false,
+            suspendRender: false,
+            // Параметры маски для зачистки фона от текста
+            maskPadX: 4,
+            maskPadY: 4,
+            maskHeightFactor: 1.8,
+            maskBaselineTol: 0.35,
+            maskDebug: false
+        };
 
         function getParam(name) { var url = new URL(window.location.href); return url.searchParams.get(name); }
 
@@ -112,26 +119,158 @@
             }
         }
 
-        function createOverlay(pageWrap, viewport, matches) {
-            var overlay = document.createElement('div');
-            overlay.className = 'overlay-layer';
-            pageWrap.appendChild(overlay);
+        function escapeXml(val) {
+            return String(val || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function replacePlaceholdersInSvg(svgText) {
+            if (!svgText || typeof svgText !== 'string') return svgText;
+            return svgText.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, function (_m, key) {
+                var v = mapValue(key, state.cvData);
+                return escapeXml(v);
+            });
+        }
+
+        function extractPlaceholderMatches(textContent) {
+            var items = (textContent && textContent.items) || [];
+            var matches = [];
+            var re = /\{\{\s*([A-Z0-9_]+)\s*\}\}/g;
+            for (var k = 0; k < items.length; k++) {
+                var it = items[k];
+                var str = String(it.str || it.text || '');
+                var m;
+                while ((m = re.exec(str)) !== null) {
+                    var key = m[1];
+                    var tf = it.transform || [1, 0, 0, 1, 0, 0];
+                    var a = tf[0], b = tf[1], d = tf[3], e = tf[4], f = tf[5];
+                    var fontSize = Math.max(10, Math.hypot(a, b) || Math.abs(d) || 12);
+                    var width = (it.width || (str.length * fontSize * 0.62));
+                    matches.push({ key: key, x: e, y: f, width: width, fontSize: fontSize });
+                }
+            }
+            return matches;
+        }
+
+        function drawPlaceholderValues(ctx, viewport, matches) {
+            if (!ctx || !matches || !matches.length) return;
+            ctx.save();
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillStyle = '#111827';
+
             for (var i = 0; i < matches.length; i++) {
                 var item = matches[i];
-                var key = item.key, x = item.x, y = item.y, width = item.width, fontSize = item.fontSize;
-                var value = mapValue(key, state.cvData);
-                var el = document.createElement('div');
-                el.className = 'field';
-                var left = x * state.scale;
-                var top = (viewport.height - y) * state.scale - (fontSize * state.scale * 0.8);
-                el.style.left = left + 'px';
-                el.style.top = Math.max(0, top) + 'px';
-                el.style.fontSize = Math.max(10, fontSize * state.scale) + 'px';
-                el.style.padding = '2px 4px';
-                el.textContent = value || '';
-                overlay.appendChild(el);
+                var value = mapValue(item.key, state.cvData) || '';
+                var fontSize = Math.max(10, item.fontSize);
+                var x = item.x;
+                var y = item.y;
+                var textWidth = Math.max(item.width || 1, value.length * fontSize * 0.58);
+                var maskX = x - 2;
+                var maskY = (viewport.height - y) - (fontSize * 0.92) - 2;
+                var maskH = Math.max(12, fontSize * 1.45);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(maskX, maskY, textWidth + 6, maskH + 4);
+
+                ctx.fillStyle = '#111827';
+                ctx.font = fontSize + 'px Inter, system-ui, Arial, sans-serif';
+                ctx.fillText(value, x, viewport.height - y);
             }
-            state.overlays.push(overlay);
+
+            ctx.restore();
+        }
+
+        async function renderPageWithPlaceholders(p) {
+            console.log('[renderPageWithPlaceholders] Start, has renderPromise:', !!p.renderPromise);
+            if (state.suspendRender) {
+                console.log('[renderPageWithPlaceholders] Skipped because suspendRender=true');
+                return;
+            }
+            if (!p || !p.canvas || !p.page || !p.viewport) {
+                console.warn('[renderPageWithPlaceholders] Missing required properties');
+                return;
+            }
+            if (p.renderPromise) {
+                console.log('[renderPageWithPlaceholders] Already rendering, waiting with timeout...');
+                p.needsRerender = true;
+                try {
+                    await Promise.race([
+                        p.renderPromise,
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Render timeout')), 5000))
+                    ]);
+                    console.log('[renderPageWithPlaceholders] Previous render complete');
+                    return;
+                } catch (err) {
+                    console.warn('[renderPageWithPlaceholders] Wait failed:', err.message);
+                    if (state.suspendRender) {
+                        console.log('[renderPageWithPlaceholders] Abort wait because suspendRender=true');
+                        return;
+                    }
+                    // Отменяем активный renderTask перед сбросом промиса
+                    if (p.renderTask) {
+                        console.log('[renderPageWithPlaceholders] Cancelling active renderTask');
+                        try {
+                            p.renderTask.cancel();
+                            await p.renderTask.promise.catch(() => { });
+                        } catch (_) { }
+                        p.renderTask = null;
+                    }
+                    p.renderPromise = null;
+                    // Подождем немного, чтобы canvas освободился
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+
+            p.renderPromise = (async function run() {
+                var iteration = 0;
+                var maxIterations = 3;
+                do {
+                    console.log('[renderPageWithPlaceholders] Render loop iteration:', iteration, 'needsRerender:', p.needsRerender);
+                    p.needsRerender = false;
+                    iteration++;
+
+                    if (iteration > maxIterations) {
+                        console.warn('[renderPageWithPlaceholders] Max iterations reached');
+                        break;
+                    }
+
+                    var ctx = p.canvas.getContext('2d');
+                    console.log('[renderPageWithPlaceholders] Starting page.render()');
+                    var task = p.page.render({ canvasContext: ctx, viewport: p.viewport });
+                    p.renderTask = task;
+                    try {
+                        await task.promise;
+                        console.log('[renderPageWithPlaceholders] page.render() complete');
+                    } catch (err) {
+                        console.warn('[renderPageWithPlaceholders] Render error:', err?.message || err?.name || String(err), err);
+                        var isCancelled = !!(err && (err.name === 'RenderingCancelledException' || /Rendering cancelled/i.test(err.message || '')));
+                        if (!isCancelled) throw err;
+                        console.log('[renderPageWithPlaceholders] Render was cancelled (expected), continue');
+                    } finally {
+                        p.renderTask = null;
+                    }
+                    if (!p.matches || !p.matches.length) {
+                        console.log('[renderPageWithPlaceholders] Extracting text content');
+                        try {
+                            var tc = await p.page.getTextContent();
+                            p.matches = extractPlaceholderMatches(tc);
+                            console.log('[renderPageWithPlaceholders] Extracted matches:', p.matches?.length || 0);
+                        } catch (err) {
+                            console.error('[renderPageWithPlaceholders] Text extraction error:', err?.message || String(err), err);
+                            p.matches = [];
+                        }
+                    }
+                    console.log('[renderPageWithPlaceholders] Drawing placeholder values');
+                    drawPlaceholderValues(ctx, p.viewport, p.matches);
+                } while (p.needsRerender && iteration < maxIterations);
+                console.log('[renderPageWithPlaceholders] Render loop complete');
+            })();
+
+            try {
+                await p.renderPromise;
+                console.log('[renderPageWithPlaceholders] Main promise resolved');
+            } finally {
+                p.renderPromise = null;
+            }
         }
 
         async function renderPdf() {
@@ -160,6 +299,9 @@
             } else {
                 state.displayScale = 1;
             }
+            // Графический режим: по умолчанию PNG (SVG можно включить через &gfx=svg)
+            var gfxParam = (getParam('gfx') || '').toLowerCase();
+            state.useSvg = gfxParam === 'svg';
             for (var n = 1; n <= total; n++) {
                 var page = await pdf.getPage(n);
                 var viewport = page.getViewport({ scale: state.scale });
@@ -182,55 +324,38 @@
                 pageWrap.appendChild(canvas);
                 frame.appendChild(pageWrap);
                 container.appendChild(frame);
-                state.pages.push({ page: page, viewport: viewport, canvas: canvas, pageWrap: pageWrap, frame: frame });
-                await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-                // Extract placeholders like {{FIRSTNAME}}
-                var textContent = await page.getTextContent();
-                var items = textContent.items || [];
-                var matches = [];
-                var re = /\{\{\s*([A-Z_]+)\s*\}\}/g;
-                for (var k = 0; k < items.length; k++) {
-                    var it = items[k];
-                    var str = String(it.str || it.text || '');
-                    var m;
-                    while ((m = re.exec(str)) !== null) {
-                        var key = m[1];
-                        var tf = it.transform || [1, 0, 0, 1, 0, 0];
-                        var a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
-                        var fontSize = Math.hypot(a, b) || 12;
-                        var width = (it.width || (str.length * fontSize * 0.6));
-                        matches.push({ key: key, x: e, y: f, width: width, fontSize: fontSize });
-                    }
-                }
-                if (matches.length) createOverlay(pageWrap, viewport, matches);
+                var pageRef = {
+                    page: page,
+                    viewport: viewport,
+                    canvas: canvas,
+                    pageWrap: pageWrap,
+                    frame: frame,
+                    matches: [],
+                    renderPromise: null,
+                    renderTask: null,
+                    needsRerender: false
+                };
+                state.pages.push(pageRef);
+                await renderPageWithPlaceholders(pageRef);
             }
             try { window.parent.postMessage({ type: 'cv-ready' }, window.location.origin); } catch (e) { }
         }
 
-        function updateOverlays() {
-            for (var i = 0; i < state.overlays.length; i++) { state.overlays[i].remove(); }
-            state.overlays = [];
-            state.pages.forEach(function (p) {
-                p.page.getTextContent().then(function (textContent) {
-                    var items = textContent.items || [];
-                    var matches = [];
-                    var re = /\{\{\s*([A-Z_]+)\s*\}\}/g;
-                    for (var k = 0; k < items.length; k++) {
-                        var it = items[k];
-                        var str = String(it.str || it.text || '');
-                        var m;
-                        while ((m = re.exec(str)) !== null) {
-                            var key = m[1];
-                            var tf = it.transform || [1, 0, 0, 1, 0, 0];
-                            var a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
-                            var fontSize = Math.hypot(a, b) || 12;
-                            var width = (it.width || (str.length * fontSize * 0.6));
-                            matches.push({ key: key, x: e, y: f, width: width, fontSize: fontSize });
-                        }
-                    }
-                    if (matches.length) createOverlay(p.pageWrap, p.viewport, matches);
-                }).catch(function () { });
-            });
+        async function updateOverlays() {
+            if (state.updatingOverlays) {
+                state.pendingOverlayUpdate = true;
+                return;
+            }
+            state.updatingOverlays = true;
+            for (var i = 0; i < state.pages.length; i++) {
+                var p = state.pages[i];
+                await renderPageWithPlaceholders(p);
+            }
+            state.updatingOverlays = false;
+            if (state.pendingOverlayUpdate) {
+                state.pendingOverlayUpdate = false;
+                await updateOverlays();
+            }
         }
 
         async function exportPng() {
@@ -268,46 +393,280 @@
         }
 
         async function exportStrictHtml() {
+            state.suspendRender = true;
             try {
+                console.log('[exportStrictHtml] Starting export, pages:', state.pages.length);
                 var pageHtmlParts = [];
                 for (var i = 0; i < state.pages.length; i++) {
-                    var page = state.pages[i].page;
-                    var viewport = state.pages[i].viewport;
-                    var textContent = await page.getTextContent();
-                    var items = textContent.items || [];
-                    var styleMap = textContent.styles || {};
+                    var p = state.pages[i];
+                    var viewport = p.viewport;
                     var displayFactor = state.displayScale || 1;
-                    var renderFactor = state.scale || 1;
                     var pageWidth = Math.floor(viewport.width * displayFactor);
                     var pageHeight = Math.floor(viewport.height * displayFactor);
-                    var lines = ["<div class=\"page-wrap\" style=\"position:relative;width:" + pageWidth + "px;height:" + pageHeight + "px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)\">"];
-                    for (var k = 0; k < items.length; k++) {
-                        var it = items[k];
-                        var str = String(it.str || it.text || '').replace(/[\u0000-\u001F]/g, '');
-                        if (!str.trim()) continue;
-                        var tf = it.transform || [1, 0, 0, 1, 0, 0];
-                        var a = tf[0], b = tf[1], c = tf[2], d = tf[3], e = tf[4], f = tf[5];
-                        var fontSizeBase = Math.max(8, Math.abs(d) || Math.hypot(a, b) || 12);
-                        var st = styleMap[it.fontName] || {};
-                        var family = st.fontFamily ? String(st.fontFamily) : 'Inter, system-ui, Arial, sans-serif';
-                        var ascent = typeof st.ascent === 'number' ? st.ascent : 0.8;
-                        var weight = /bold|black|heavy|semibold|medium/i.test(String(it.fontName || '')) ? (/bold|black|heavy/i.test(it.fontName) ? 700 : 600) : 400;
-                        var fontStyle = /italic|oblique/i.test(String(it.fontName || '')) ? 'italic' : 'normal';
-                        // Apply both render and visual display scaling so HTML matches PDF export
-                        var left = e * renderFactor * displayFactor;
-                        var topRaw = (viewport.height - (f * renderFactor)) - (fontSizeBase * renderFactor * ascent);
-                        var top = topRaw * displayFactor;
-                        var fontSize = Math.round(fontSizeBase * renderFactor * displayFactor);
-                        var safe = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        lines.push("<span style=\"position:absolute;left:" + Math.round(left) + "px;top:" + Math.round(Math.max(0, top)) + "px;font-size:" + fontSize + "px;white-space:pre;line-height:" + Math.round(fontSize * 1.05) + "px;font-family:" + family + ";font-weight:" + weight + ";font-style:" + fontStyle + ";\">" + safe + "</span>");
+                    console.log('[exportStrictHtml] Page', i, 'viewport:', viewport.width, 'x', viewport.height);
+
+                    var bgUrl = '';
+                    // Используем отдельный offscreen canvas для экспорта, чтобы не конфликтовать с live preview
+                    console.log('[exportStrictHtml] Page', i, 'rendering to offscreen canvas');
+
+                    // Отменяем активный рендер основного canvas, если он выполняется, чтобы освободить страницу для offscreen-рендера
+                    if (p.renderTask) {
+                        console.log('[exportStrictHtml] Page', i, 'cancelling active main canvas renderTask');
+                        try {
+                            p.renderTask.cancel();
+                            await p.renderTask.promise.catch(() => { });
+                        } catch (_) { }
+                        p.renderTask = null;
                     }
+                    if (p.renderPromise) {
+                        console.log('[exportStrictHtml] Page', i, 'waiting for renderPromise to clear (max 3s)');
+                        try {
+                            await Promise.race([
+                                p.renderPromise,
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('clearRender timeout')), 3000))
+                            ]);
+                            console.log('[exportStrictHtml] Page', i, 'renderPromise cleared successfully');
+                        } catch (waitErr) {
+                            console.warn('[exportStrictHtml] Page', i, 'renderPromise wait timeout, proceeding anyway');
+                        }
+                        // Не обнуляем renderPromise извне - let it clear naturally via finally block
+                    }
+                    // Небольшая пауза, чтобы PDF.js гарантированно освободил internal страницу
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    try {
+                        var tmp = document.createElement('canvas');
+                        tmp.width = Math.max(1, Math.floor(viewport.width));
+                        tmp.height = Math.max(1, Math.floor(viewport.height));
+                        var tctx = tmp.getContext('2d');
+                        console.log('[exportStrictHtml] Page', i, 'offscreen canvas:', tmp.width, 'x', tmp.height);
+
+                        // Рендерим страницу в offscreen canvas
+                        console.log('[exportStrictHtml] Page', i, 'starting page.render()');
+                        await p.page.render({ canvasContext: tctx, viewport: viewport }).promise;
+                        console.log('[exportStrictHtml] Page', i, 'page.render() complete');
+
+                        // Применяем placeholder values поверх
+                        var matches = Array.isArray(p.matches) ? p.matches : [];
+                        if (!matches.length) {
+                            console.log('[exportStrictHtml] Page', i, 'extracting text content for matches');
+                            try {
+                                var tc = await p.page.getTextContent();
+                                matches = extractPlaceholderMatches(tc);
+                            } catch (err) {
+                                console.warn('[exportStrictHtml] Page', i, 'text extraction failed:', err?.message || String(err), err);
+                                matches = [];
+                            }
+                        }
+                        console.log('[exportStrictHtml] Page', i, 'drawing', matches.length, 'placeholder values');
+                        drawPlaceholderValues(tctx, viewport, matches);
+
+                        bgUrl = tmp.toDataURL('image/png');
+                        console.log('[exportStrictHtml] Page', i, 'bgUrl length:', bgUrl?.length || 0);
+                    } catch (renderErr) {
+                        console.error('[exportStrictHtml] Page', i, 'offscreen render failed:', renderErr?.message || renderErr?.name || String(renderErr), renderErr);
+                        bgUrl = '';
+                    }
+
+                    var lines = ["<div class=\"page-wrap\" style=\"position:relative;width:" + pageWidth + "px;height:" + pageHeight + "px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)\">"];
+                    if (bgUrl) {
+                        console.log('[exportStrictHtml] Page', i, 'adding bg img to HTML');
+                        lines.push("<img src=\"" + bgUrl + "\" style=\"position:absolute;left:0;top:0;width:" + pageWidth + "px;height:" + pageHeight + "px;display:block\" />");
+                    } else {
+                        console.warn('[exportStrictHtml] Page', i, 'NO BACKGROUND IMAGE, white fallback');
+                    }
+                    // Placeholder values уже встроены в PNG через drawPlaceholderValues, не добавляем spans
                     lines.push('</div>');
                     pageHtmlParts.push(lines.join(''));
                 }
                 var html = "<!DOCTYPE html><html lang=\"ru\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>PDF → HTML</title><style>html,body{margin:0;padding:0;background:#f8fafc;font-family:Inter,system-ui,Arial,sans-serif}#pages{display:flex;flex-direction:column;align-items:center;gap:12px;padding:0;width:100%;max-width:100%}</style></head><body><div id=\"pages\">" + pageHtmlParts.join('') + "</div></body></html>";
+                console.log('[exportStrictHtml] Export complete, html length:', html.length);
+                // Проверка на пустой HTML
+                if (!html || html.length < 200 || pageHtmlParts.length === 0) {
+                    console.error('[exportStrictHtml] Generated HTML is too short or empty');
+                    window.parent.postMessage({ type: 'export-strict-html-result', html: null, error: 'Generated HTML is empty or invalid' }, window.location.origin);
+                    // Восстанавливаем live preview после экспорта
+                    updateOverlays();
+                    return;
+                }
                 window.parent.postMessage({ type: 'export-strict-html-result', html: html }, window.location.origin);
             } catch (e) {
+                console.error('[exportStrictHtml] ERROR:', e?.message || e?.name || String(e), e);
                 window.parent.postMessage({ type: 'export-strict-html-result', html: null, error: (e && e.message) }, window.location.origin);
+            } finally {
+                // Восстанавливаем live preview после экспорта/ошибки
+                state.suspendRender = false;
+                console.log('[exportStrictHtml] Restoring live preview');
+                updateOverlays();
+            }
+        }
+
+        // Vector HTML export: background as SVG/clean canvas, text as selectable spans
+        async function exportStrictHtmlVector() {
+            state.suspendRender = true;
+            try {
+                var parts = [];
+                for (var i = 0; i < state.pages.length; i++) {
+                    var p = state.pages[i];
+                    var page = p.page;
+                    var viewport = p.viewport;
+                    var displayFactor = state.displayScale || 1;
+                    var pageWidth = Math.floor(viewport.width * displayFactor);
+                    var pageHeight = Math.floor(viewport.height * displayFactor);
+
+                    // --- Background (colors/shapes), без текста ---
+                    var bgHtml = '';
+                    var usedSvgBg = false;
+                    if (window.pdfjsLib && window.pdfjsLib.SVGGraphics && page && page.getOperatorList && window.pdfjsLib.OPS) {
+                        try {
+                            var fullOps = await page.getOperatorList({ fontExtraProperties: true });
+                            var OPS = window.pdfjsLib.OPS;
+                            var toExclude = [];
+                            if (typeof OPS.showText !== 'undefined') toExclude.push(OPS.showText);
+                            if (typeof OPS.showTextRuns !== 'undefined') toExclude.push(OPS.showTextRuns);
+                            if (typeof OPS.fillText !== 'undefined') toExclude.push(OPS.fillText);
+                            if (typeof OPS.strokeText !== 'undefined') toExclude.push(OPS.strokeText);
+                            if (typeof OPS.paintChar !== 'undefined') toExclude.push(OPS.paintChar);
+                            if (typeof OPS.paintChars !== 'undefined') toExclude.push(OPS.paintChars);
+                            if (typeof OPS.paintType3Glyph !== 'undefined') toExclude.push(OPS.paintType3Glyph);
+                            if (typeof OPS.paintType3Chars !== 'undefined') toExclude.push(OPS.paintType3Chars);
+                            var textOps = new Set(toExclude);
+                            var filteredFn = [];
+                            var filteredArgs = [];
+                            for (var oi = 0; oi < fullOps.fnArray.length; oi++) {
+                                var fn = fullOps.fnArray[oi];
+                                if (!textOps.has(fn)) {
+                                    filteredFn.push(fn);
+                                    filteredArgs.push(fullOps.argsArray[oi]);
+                                }
+                            }
+                            var filteredOpList = { fnArray: filteredFn, argsArray: filteredArgs };
+                            var svgGfx = new window.pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+                            svgGfx.embedFonts = true;
+                            var svgEl = await svgGfx.getSVG(filteredOpList, viewport);
+                            svgEl.setAttribute('width', String(pageWidth));
+                            svgEl.setAttribute('height', String(pageHeight));
+                            svgEl.setAttribute('viewBox', '0 0 ' + viewport.width + ' ' + viewport.height);
+                            bgHtml = replacePlaceholdersInSvg(new XMLSerializer().serializeToString(svgEl));
+                            usedSvgBg = true;
+                        } catch (svgErr) {
+                            console.warn('[exportStrictHtmlVector] SVG background failed, fallback to canvas:', svgErr?.message || svgErr);
+                            usedSvgBg = false;
+                        }
+                    }
+
+                    if (!usedSvgBg) {
+                        try {
+                            var bgCanvas = document.createElement('canvas');
+                            bgCanvas.width = Math.max(1, Math.floor(viewport.width));
+                            bgCanvas.height = Math.max(1, Math.floor(viewport.height));
+                            var bgCtx = bgCanvas.getContext('2d');
+                            await page.render({ canvasContext: bgCtx, viewport: viewport, intent: 'print' }).promise;
+
+                            // Маска для удаления текстов с фона (чтобы текст был только в слое spans)
+                            var textContentForMask = await page.getTextContent();
+                            var itemsForMask = textContentForMask.items || [];
+                            bgCtx.globalCompositeOperation = 'destination-out';
+                            var padX = state.maskPadX, padY = state.maskPadY;
+                            var rows = [];
+                            for (var mk = 0; mk < itemsForMask.length; mk++) {
+                                var mit = itemsForMask[mk];
+                                var raw = String(mit.str || mit.text || '');
+                                if (!raw.trim()) continue;
+                                var tfm = mit.transform || [1, 0, 0, 1, 0, 0];
+                                var ma = tfm[0], mb = tfm[1], md = tfm[3], me = tfm[4], mf = tfm[5];
+                                var mFontSize = Math.max(8, Math.abs(md) || Math.hypot(ma, mb) || 12);
+                                var mWidth = mit.width || (raw.length * mFontSize * 0.62);
+                                var baseline = mf;
+                                var row = null;
+                                for (var ri = 0; ri < rows.length; ri++) {
+                                    if (Math.abs(rows[ri].baseline - baseline) <= Math.max(2, mFontSize * state.maskBaselineTol)) { row = rows[ri]; break; }
+                                }
+                                if (!row) {
+                                    row = { baseline: baseline, minX: me, maxX: me + mWidth, fontSize: mFontSize };
+                                    rows.push(row);
+                                } else {
+                                    row.minX = Math.min(row.minX, me);
+                                    row.maxX = Math.max(row.maxX, me + mWidth);
+                                    row.fontSize = Math.max(row.fontSize, mFontSize);
+                                }
+                            }
+                            for (var rj = 0; rj < rows.length; rj++) {
+                                var r = rows[rj];
+                                var mLeft = r.minX - padX;
+                                var mTop = (viewport.height - r.baseline) - (r.fontSize * 0.9) - padY;
+                                var mHeight = r.fontSize * state.maskHeightFactor + padY * 2;
+                                var mWidthLine = (r.maxX - r.minX) + padX * 2;
+                                bgCtx.fillStyle = 'rgba(0,0,0,1)';
+                                bgCtx.fillRect(mLeft, mTop, Math.max(1, mWidthLine), Math.max(1, mHeight));
+                            }
+                            bgCtx.globalCompositeOperation = 'source-over';
+                            var bgUrl = bgCanvas.toDataURL('image/png');
+                            bgHtml = '<img src="' + bgUrl + '" style="position:absolute;left:0;top:0;width:' + pageWidth + 'px;height:' + pageHeight + 'px;display:block" />';
+                        } catch (bgErr) {
+                            console.warn('[exportStrictHtmlVector] Canvas background failed:', bgErr?.message || bgErr);
+                            bgHtml = '';
+                        }
+                    }
+
+                    // --- Текстовый слой: всегда текстовые spans ---
+                    var textSpans = [];
+                    try {
+                        var textContent = await page.getTextContent();
+                        var items = textContent.items || [];
+                        for (var t = 0; t < items.length; t++) {
+                            var it = items[t];
+                            var raw = String(it.str || it.text || '');
+                            var tfm = it.transform || [1, 0, 0, 1, 0, 0];
+                            var a = tfm[0], b = tfm[1], d = tfm[3], e = tfm[4], f = tfm[5];
+                            var fontSize = Math.max(8, Math.hypot(a, b) || Math.abs(d) || 12);
+                            var cleaned = raw.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, function (_m, key) {
+                                return mapValue(key, state.cvData) || '';
+                            });
+                            if (!cleaned) continue;
+                            var safeVal = escapeXml(cleaned);
+                            var left = e * displayFactor;
+                            var top = ((viewport.height - f) - (fontSize * 0.9)) * displayFactor;
+                            var width = Math.max(it.width || (safeVal.length * fontSize * 0.62), 1) * displayFactor;
+                            var lineHeight = Math.round(fontSize * 1.05 * displayFactor);
+                            var fontName = it.fontName ? String(it.fontName) : '';
+                            textSpans.push(
+                                '<span style="position:absolute;left:' + Math.round(left) + 'px;top:' + Math.round(Math.max(0, top)) + 'px;' +
+                                'display:inline-block;min-width:' + Math.round(width) + 'px;' +
+                                'font-size:' + Math.round(fontSize * displayFactor) + 'px;line-height:' + Math.max(lineHeight, 1) + 'px;' +
+                                'font-family:' + (fontName ? '"' + fontName + '", ' : '') + 'Inter,system-ui,Arial,sans-serif;' +
+                                'font-weight:' + (it.fontWeight || 400) + ';color:#111827;white-space:pre;">' + safeVal + '</span>'
+                            );
+                        }
+                    } catch (txtErr) {
+                        console.warn('[exportStrictHtmlVector] textContent fallback failed:', txtErr?.message || txtErr);
+                    }
+
+                    var bgLayer = bgHtml ? '<div class="svg-layer" style="position:absolute;left:0;top:0;width:' + pageWidth + 'px;height:' + pageHeight + 'px;pointer-events:none">' + bgHtml + '</div>' : '';
+                    var textLayerHtml = textSpans.length ? '<div class="text-layer" style="position:absolute;left:0;top:0;width:' + pageWidth + 'px;height:' + pageHeight + 'px;pointer-events:none;">' + textSpans.join('') + '</div>' : '';
+
+                    parts.push(
+                        '<div class="page-wrap" style="position:relative;width:' + pageWidth + 'px;height:' + pageHeight + 'px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)">' +
+                        bgLayer + textLayerHtml +
+                        '</div>'
+                    );
+                }
+
+                var html =
+                    '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">' +
+                    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+                    '<title>PDF → HTML (vector)</title>' +
+                    '<style>html,body{margin:0;padding:0;background:#f8fafc;font-family:Inter,system-ui,Arial,sans-serif}' +
+                    '#pages{display:flex;flex-direction:column;align-items:center;gap:12px;padding:0;width:100%;max-width:100%}' +
+                    '.text-layer{color:#111827} .text-layer span{caret-color:#111827} .svg-layer img{display:block;width:100%;height:100%;} .svg-layer svg{display:block;width:100%;height:100%;}</style></head><body>' +
+                    '<div id="pages">' + parts.join('') + '</div></body></html>';
+
+                window.parent.postMessage({ type: 'export-strict-html-vector-result', html: html }, window.location.origin);
+            } catch (e) {
+                window.parent.postMessage({ type: 'export-strict-html-vector-result', html: null, error: (e && e.message) }, window.location.origin);
+            } finally {
+                state.suspendRender = false;
+                updateOverlays();
             }
         }
 
@@ -317,10 +676,22 @@
             if (msg.type === 'export-png') exportPng();
             if (msg.type === 'export-pdf') exportPdf();
             if (msg.type === 'export-strict-html') exportStrictHtml();
+            if (msg.type === 'export-strict-html-vector') exportStrictHtmlVector();
         });
 
         (async function init() {
             state.src = getParam('src');
+            // Чтение параметров маски из URL
+            var pMaskPadX = parseFloat(getParam('maskPadX'));
+            var pMaskPadY = parseFloat(getParam('maskPadY'));
+            var pMaskHeightFactor = parseFloat(getParam('maskHeightFactor'));
+            var pMaskBaselineTol = parseFloat(getParam('maskBaselineTol'));
+            var pMaskDebug = getParam('maskDebug');
+            if (!isNaN(pMaskPadX)) state.maskPadX = pMaskPadX;
+            if (!isNaN(pMaskPadY)) state.maskPadY = pMaskPadY;
+            if (!isNaN(pMaskHeightFactor)) state.maskHeightFactor = pMaskHeightFactor;
+            if (!isNaN(pMaskBaselineTol)) state.maskBaselineTol = pMaskBaselineTol;
+            state.maskDebug = (pMaskDebug === '1');
             if (!state.src) {
                 var cont = document.getElementById('pages');
                 var note = document.createElement('div');
@@ -330,7 +701,21 @@
                 try { window.parent.postMessage({ type: 'cv-ready' }, window.location.origin); } catch (e) { }
                 return;
             }
-            try { await renderPdf(); } catch (e) { console.error('PDF render error:', e); }
+            try { await renderPdf(); }
+            catch (e) {
+                console.error('PDF render error:', e);
+                var cont = document.getElementById('pages');
+                var msg = document.createElement('div');
+                msg.style.color = '#b91c1c';
+                msg.style.background = '#fee2e2';
+                msg.style.border = '1px solid #fecaca';
+                msg.style.padding = '10px 12px';
+                msg.style.borderRadius = '8px';
+                msg.style.fontSize = '13px';
+                msg.textContent = 'Не удалось загрузить PDF: ' + (state.src || '—') + '. Проверьте путь или доступ.';
+                cont.appendChild(msg);
+                try { window.parent.postMessage({ type: 'pdf-error', error: (e && e.message) || String(e) }, window.location.origin); } catch (_) { }
+            }
 
 
 

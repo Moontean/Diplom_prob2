@@ -279,6 +279,10 @@ module.exports = {
 - Заголовок документа: ${title}.
 - Страница должна занимать всю ширину контейнера, быть масштабируемой.
 `;
+    const buildImageFallbackHtml = () => {
+      const dataUrl = `data:${mime};base64,${data}`;
+      return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>html,body{margin:0;padding:0;background:#f8fafc} .page-wrap{display:flex;align-items:center;justify-content:center;padding:16px} .page{max-width:100%;height:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);background:#fff}</style></head><body><div class="page-wrap"><img class="page" src="${dataUrl}" alt="${title}"></div></body></html>`;
+    };
     if (useGemini && geminiModel) {
       // Первая попытка (основной промпт)
       let res = await geminiModel.generateContent([
@@ -308,6 +312,16 @@ module.exports = {
     const url = `${base}/chat/completions`;
     const headers = { 'Content-Type': 'application/json' };
     if (OAI_API_KEY) headers['Authorization'] = `Bearer ${OAI_API_KEY}`;
+    const timeoutMs = Number(process.env.OAI_REQUEST_TIMEOUT_MS || 60000);
+    const fetchWithTimeout = async (payload) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error('OAI request timeout')), timeoutMs);
+      try {
+        return await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    };
     const body = {
       model: OAI_MODEL,
       messages: [
@@ -322,7 +336,13 @@ module.exports = {
       temperature: 0.2,
       max_tokens: 4096
     };
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await fetchWithTimeout(body);
+    } catch (netErr) {
+      if (strict) throw netErr;
+      return buildImageFallbackHtml();
+    }
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       throw new Error(`OpenAI-compatible error: ${res.status} ${errText}`);
@@ -344,7 +364,13 @@ module.exports = {
           }
         ]
       };
-      const res2 = await fetch(url, { method: 'POST', headers, body: JSON.stringify(retryBody) });
+      let res2;
+      try {
+        res2 = await fetchWithTimeout(retryBody);
+      } catch (netErr2) {
+        if (strict) throw netErr2;
+        return buildImageFallbackHtml();
+      }
       if (!res2.ok) {
         const errText2 = await res2.text().catch(() => '');
         throw new Error(`OpenAI-compatible error(retry): ${res2.status} ${errText2}`);
@@ -356,9 +382,7 @@ module.exports = {
     if (!html) {
       if (strict) throw new Error('AI не вернул валидный HTML');
       // Надёжный фолбэк: формируем валидный HTML с встроенным изображением (пиксель-в-пиксель превью).
-      const dataUrl = `data:${mime};base64,${data}`;
-      const fallback = `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>html,body{margin:0;padding:0;background:#f8fafc} .page-wrap{display:flex;align-items:center;justify-content:center;padding:16px} .page{max-width:100%;height:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);background:#fff}</style></head><body><div class="page-wrap"><img class="page" src="${dataUrl}" alt="${title}"></div></body></html>`;
-      return fallback;
+      return buildImageFallbackHtml();
     }
     return html;
   }
