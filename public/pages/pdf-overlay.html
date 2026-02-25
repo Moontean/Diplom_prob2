@@ -131,6 +131,21 @@
             });
         }
 
+        function detectPlaceholderKey(raw, counters) {
+            if (!raw) return null;
+            var m = raw.match(/\{\{\s*([A-Z0-9_]+)\s*\}\}/);
+            if (m && m[1]) return m[1];
+            var s = String(raw).trim();
+            if (/^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/.test(s)) return 'EMAIL';
+            if (/^(\+?\d[\d\s().-]{6,})$/.test(s)) return 'PHONE';
+            if (/linkedin\.com/i.test(s)) return 'LINKEDIN';
+            if (/https?:\/\//i.test(s)) return 'WEBSITE';
+            if (/^\d{5,6}$/.test(s)) return 'ZIP';
+            // Fallback counter-based placeholder
+            counters.text = counters.text + 1;
+            return 'TEXT_' + counters.text;
+        }
+
         function extractPlaceholderMatches(textContent) {
             var items = (textContent && textContent.items) || [];
             var matches = [];
@@ -542,7 +557,8 @@
                             }
                             var filteredOpList = { fnArray: filteredFn, argsArray: filteredArgs };
                             var svgGfx = new window.pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
-                            svgGfx.embedFonts = true;
+                            // Allow generation even if fonts are not embedded
+                            svgGfx.embedFonts = false;
                             var svgEl = await svgGfx.getSVG(filteredOpList, viewport);
                             svgEl.setAttribute('width', String(pageWidth));
                             svgEl.setAttribute('height', String(pageHeight));
@@ -563,12 +579,14 @@
                             var bgCtx = bgCanvas.getContext('2d');
                             await page.render({ canvasContext: bgCtx, viewport: viewport, intent: 'print' }).promise;
 
-                            // Маска для удаления текстов с фона (чтобы текст был только в слое spans)
+                            // Aggressive per-item + per-line mask to scrub all text from background
                             var textContentForMask = await page.getTextContent();
                             var itemsForMask = textContentForMask.items || [];
                             bgCtx.globalCompositeOperation = 'destination-out';
-                            var padX = state.maskPadX, padY = state.maskPadY;
-                            var rows = [];
+                            var padX = Math.max(state.maskPadX, 24);
+                            var padY = Math.max(state.maskPadY, 18);
+                            var rowBuckets = [];
+                            var baselineTol = Math.max(6, state.maskBaselineTol * 14);
                             for (var mk = 0; mk < itemsForMask.length; mk++) {
                                 var mit = itemsForMask[mk];
                                 var raw = String(mit.str || mit.text || '');
@@ -577,28 +595,33 @@
                                 var ma = tfm[0], mb = tfm[1], md = tfm[3], me = tfm[4], mf = tfm[5];
                                 var mFontSize = Math.max(8, Math.abs(md) || Math.hypot(ma, mb) || 12);
                                 var mWidth = mit.width || (raw.length * mFontSize * 0.62);
-                                var baseline = mf;
-                                var row = null;
-                                for (var ri = 0; ri < rows.length; ri++) {
-                                    if (Math.abs(rows[ri].baseline - baseline) <= Math.max(2, mFontSize * state.maskBaselineTol)) { row = rows[ri]; break; }
-                                }
-                                if (!row) {
-                                    row = { baseline: baseline, minX: me, maxX: me + mWidth, fontSize: mFontSize };
-                                    rows.push(row);
-                                } else {
-                                    row.minX = Math.min(row.minX, me);
-                                    row.maxX = Math.max(row.maxX, me + mWidth);
-                                    row.fontSize = Math.max(row.fontSize, mFontSize);
-                                }
-                            }
-                            for (var rj = 0; rj < rows.length; rj++) {
-                                var r = rows[rj];
-                                var mLeft = r.minX - padX;
-                                var mTop = (viewport.height - r.baseline) - (r.fontSize * 0.9) - padY;
-                                var mHeight = r.fontSize * state.maskHeightFactor + padY * 2;
-                                var mWidthLine = (r.maxX - r.minX) + padX * 2;
+                                var mLeft = me - padX * 2.0;
+                                var mTop = (viewport.height - mf) - (mFontSize * 1.1) - padY * 2.0;
+                                var mHeight = mFontSize * Math.max(state.maskHeightFactor, 3.2) + padY * 4.0;
+                                var mWidthLine = mWidth + padX * 4.0;
                                 bgCtx.fillStyle = 'rgba(0,0,0,1)';
                                 bgCtx.fillRect(mLeft, mTop, Math.max(1, mWidthLine), Math.max(1, mHeight));
+
+                                var bucket = null;
+                                for (var bi = 0; bi < rowBuckets.length; bi++) {
+                                    if (Math.abs(rowBuckets[bi].baseline - mf) <= baselineTol) { bucket = rowBuckets[bi]; break; }
+                                }
+                                if (!bucket) {
+                                    bucket = { baseline: mf, minX: me, maxX: me + mWidth, maxFont: mFontSize };
+                                    rowBuckets.push(bucket);
+                                } else {
+                                    bucket.minX = Math.min(bucket.minX, me);
+                                    bucket.maxX = Math.max(bucket.maxX, me + mWidth);
+                                    bucket.maxFont = Math.max(bucket.maxFont, mFontSize);
+                                }
+                            }
+                            for (var rb = 0; rb < rowBuckets.length; rb++) {
+                                var r = rowBuckets[rb];
+                                var mLeft2 = 0;
+                                var mTop2 = (viewport.height - r.baseline) - (r.maxFont * 1.2) - padY * 2.4;
+                                var mHeight2 = r.maxFont * Math.max(state.maskHeightFactor, 3.4) + padY * 5.0;
+                                var mWidth2 = viewport.width + padX * 2.0;
+                                bgCtx.fillRect(mLeft2, mTop2, Math.max(1, mWidth2), Math.max(1, mHeight2));
                             }
                             bgCtx.globalCompositeOperation = 'source-over';
                             var bgUrl = bgCanvas.toDataURL('image/png');
@@ -611,31 +634,63 @@
 
                     // --- Текстовый слой: всегда текстовые spans ---
                     var textSpans = [];
+                    var placeholderCounters = { text: 0 };
                     try {
                         var textContent = await page.getTextContent();
                         var items = textContent.items || [];
+                        var rows = [];
+                        var tol = Math.max(2, state.maskBaselineTol * 10);
                         for (var t = 0; t < items.length; t++) {
                             var it = items[t];
                             var raw = String(it.str || it.text || '');
+                            if (!raw.trim()) continue;
                             var tfm = it.transform || [1, 0, 0, 1, 0, 0];
                             var a = tfm[0], b = tfm[1], d = tfm[3], e = tfm[4], f = tfm[5];
                             var fontSize = Math.max(8, Math.hypot(a, b) || Math.abs(d) || 12);
-                            var cleaned = raw.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, function (_m, key) {
-                                return mapValue(key, state.cvData) || '';
-                            });
-                            if (!cleaned) continue;
-                            var safeVal = escapeXml(cleaned);
-                            var left = e * displayFactor;
-                            var top = ((viewport.height - f) - (fontSize * 0.9)) * displayFactor;
-                            var width = Math.max(it.width || (safeVal.length * fontSize * 0.62), 1) * displayFactor;
-                            var lineHeight = Math.round(fontSize * 1.05 * displayFactor);
-                            var fontName = it.fontName ? String(it.fontName) : '';
+                            var baseline = f;
+                            var row = null;
+                            for (var ri = 0; ri < rows.length; ri++) {
+                                if (Math.abs(rows[ri].baseline - baseline) <= tol) { row = rows[ri]; break; }
+                            }
+                            if (!row) {
+                                row = { baseline: baseline, items: [], maxFont: fontSize };
+                                rows.push(row);
+                            }
+                            row.maxFont = Math.max(row.maxFont, fontSize);
+                            row.items.push({ x: e, width: it.width || (raw.length * fontSize * 0.62), fontSize: fontSize, text: raw, fontName: it.fontName || '', fontWeight: it.fontWeight || 400 });
+                        }
+                        // Sort rows top-to-bottom (PDF baseline desc)
+                        rows.sort(function (a, b) { return b.baseline - a.baseline; });
+                        for (var r = 0; r < rows.length; r++) {
+                            var row = rows[r];
+                            row.items.sort(function (a, b) { return a.x - b.x; });
+                            var lineText = '';
+                            var minX = row.items[0].x;
+                            var maxX = row.items[0].x + row.items[0].width;
+                            for (var ii = 0; ii < row.items.length; ii++) {
+                                var itm = row.items[ii];
+                                if (ii > 0) {
+                                    var prev = row.items[ii - 1];
+                                    var gap = itm.x - (prev.x + prev.width);
+                                    if (gap > Math.max(prev.fontSize, itm.fontSize) * 0.25) lineText += ' ';
+                                }
+                                lineText += itm.text;
+                                maxX = Math.max(maxX, itm.x + itm.width);
+                            }
+                            var key = detectPlaceholderKey(lineText, placeholderCounters);
+                            if (!key) continue;
+                            var mappedVal = mapValue(key, state.cvData) || '';
+                            var displayVal = mappedVal; // hide placeholder when no user value
+                            var fontSizeRow = row.maxFont;
+                            var left = minX * displayFactor;
+                            var top = ((viewport.height - row.baseline) - (fontSizeRow * 0.9)) * displayFactor;
+                            var width = Math.max((maxX - minX), (displayVal ? displayVal.length * fontSizeRow * 0.62 : fontSizeRow * 0.5)) * displayFactor;
+                            var lineHeight = Math.round(fontSizeRow * 1.12 * displayFactor);
                             textSpans.push(
                                 '<span style="position:absolute;left:' + Math.round(left) + 'px;top:' + Math.round(Math.max(0, top)) + 'px;' +
                                 'display:inline-block;min-width:' + Math.round(width) + 'px;' +
-                                'font-size:' + Math.round(fontSize * displayFactor) + 'px;line-height:' + Math.max(lineHeight, 1) + 'px;' +
-                                'font-family:' + (fontName ? '"' + fontName + '", ' : '') + 'Inter,system-ui,Arial,sans-serif;' +
-                                'font-weight:' + (it.fontWeight || 400) + ';color:#111827;white-space:pre;">' + safeVal + '</span>'
+                                'font-size:' + Math.round(fontSizeRow * displayFactor) + 'px;line-height:' + Math.max(lineHeight, 1) + 'px;' +
+                                'font-family:Inter,system-ui,Arial,sans-serif;font-weight:400;color:#111827;white-space:pre;user-select:text;" data-placeholder="' + key + '">' + escapeXml(displayVal) + '</span>'
                             );
                         }
                     } catch (txtErr) {
@@ -643,7 +698,7 @@
                     }
 
                     var bgLayer = bgHtml ? '<div class="svg-layer" style="position:absolute;left:0;top:0;width:' + pageWidth + 'px;height:' + pageHeight + 'px;pointer-events:none">' + bgHtml + '</div>' : '';
-                    var textLayerHtml = textSpans.length ? '<div class="text-layer" style="position:absolute;left:0;top:0;width:' + pageWidth + 'px;height:' + pageHeight + 'px;pointer-events:none;">' + textSpans.join('') + '</div>' : '';
+                    var textLayerHtml = textSpans.length ? '<div class="text-layer" style="position:absolute;left:0;top:0;width:' + pageWidth + 'px;height:' + pageHeight + 'px;pointer-events:auto;user-select:text;">' + textSpans.join('') + '</div>' : '';
 
                     parts.push(
                         '<div class="page-wrap" style="position:relative;width:' + pageWidth + 'px;height:' + pageHeight + 'px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08)">' +

@@ -33,6 +33,9 @@ const CV = require('./models/CV');
 const Assessment = require('./models/Assessment');
 const { generateAssessment, evaluateOpenAnswer } = require('./services/llm');
 const { generateHtmlFromImage } = require('./services/llm');
+const { parsePdfStructure } = require('./services/pdfStructureParser');
+const { analyzeSemantics } = require('./services/semanticAnalyzer');
+const { generateHtmlDocument, generateHtmlFragment, getFieldBindings, PLACEHOLDER_VALUES } = require('./services/htmlGenerator');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = require('docx');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
@@ -292,6 +295,191 @@ app.get('/api/templates/examples', async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: 'Не удалось получить примеры шаблонов' });
   }
+});
+
+// ===== PDF Template Processing Pipeline =====
+
+// Multer storage for PDF uploads
+const pdfUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, 'uploads', 'pdf_templates');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `template-${uniqueSuffix}.pdf`);
+  }
+});
+
+const pdfUpload = multer({
+  storage: pdfUploadStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Только PDF файлы разрешены'), false);
+    }
+  }
+});
+
+// Parse PDF structure (geometry extraction)
+app.post('/api/templates/parse-pdf', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF файл не загружен' });
+    }
+
+    const pdfPath = req.file.path;
+    const structure = await parsePdfStructure(pdfPath);
+
+    // Optionally clean up the uploaded file after parsing
+    // fs.unlinkSync(pdfPath);
+
+    res.json({
+      success: true,
+      structure,
+      filePath: pdfPath,
+      metadata: {
+        originalName: req.file.originalname,
+        size: req.file.size,
+        parsedAt: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('Ошибка парсинга PDF:', err);
+    res.status(500).json({ success: false, message: 'Ошибка парсинга PDF', error: err.message });
+  }
+});
+
+// Analyze semantics of parsed PDF (AI field detection)
+app.post('/api/templates/analyze-semantic', async (req, res) => {
+  try {
+    const { structure, pdfPath, useAI = true } = req.body;
+
+    if (!structure || !structure.pages) {
+      return res.status(400).json({ success: false, message: 'Структура PDF не предоставлена' });
+    }
+
+    const options = { useAI };
+    if (pdfPath && fs.existsSync(pdfPath)) {
+      options.pdfPath = pdfPath;
+    }
+
+    const semantics = await analyzeSemantics(structure, options);
+
+    res.json({
+      success: true,
+      semantics,
+      analyzedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Ошибка семантического анализа:', err);
+    res.status(500).json({ success: false, message: 'Ошибка анализа', error: err.message });
+  }
+});
+
+// Full pipeline: PDF → HTML with placeholders
+app.post('/api/templates/pdf-to-html', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    let pdfPath = req.file?.path;
+    let structure = req.body.structure ? JSON.parse(req.body.structure) : null;
+    const usePlaceholders = req.body.usePlaceholders !== 'false';
+    const useAI = req.body.useAI !== 'false';
+    const userData = req.body.userData ? JSON.parse(req.body.userData) : null;
+
+    // Step 1: Parse PDF if structure not provided
+    if (!structure) {
+      if (!pdfPath) {
+        return res.status(400).json({ success: false, message: 'PDF файл или структура не предоставлены' });
+      }
+      structure = await parsePdfStructure(pdfPath);
+    }
+
+    // Step 2: Semantic analysis
+    const semantics = await analyzeSemantics(structure, {
+      useAI,
+      pdfPath
+    });
+
+    // Step 3: Generate HTML
+    const html = generateHtmlDocument(structure, semantics, {
+      usePlaceholders,
+      includeDataAttributes: true,
+      userData,
+      cssInline: true
+    });
+
+    // Get field bindings for frontend
+    const fieldBindings = getFieldBindings(semantics);
+
+    // Clean up uploaded file
+    if (req.file && pdfPath) {
+      try { fs.unlinkSync(pdfPath); } catch (e) { /* ignore */ }
+    }
+
+    res.json({
+      success: true,
+      html,
+      fieldBindings,
+      placeholders: PLACEHOLDER_VALUES,
+      metadata: {
+        pages: structure.pages?.length || 0,
+        fieldsDetected: Object.keys(fieldBindings).length,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('Ошибка конвертации PDF в HTML:', err);
+    res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
+  }
+});
+
+// Generate HTML fragment from existing structure (no upload needed)
+app.post('/api/templates/generate-html', async (req, res) => {
+  try {
+    const { structure, semantics, usePlaceholders = true, userData = null } = req.body;
+
+    if (!structure) {
+      return res.status(400).json({ success: false, message: 'Структура не предоставлена' });
+    }
+
+    const html = generateHtmlFragment(structure, semantics || {}, {
+      usePlaceholders,
+      includeDataAttributes: true,
+      userData
+    });
+
+    res.json({
+      success: true,
+      html,
+      fieldBindings: semantics ? getFieldBindings(semantics) : {}
+    });
+  } catch (err) {
+    console.error('Ошибка генерации HTML:', err);
+    res.status(500).json({ success: false, message: 'Ошибка генерации', error: err.message });
+  }
+});
+
+// Get available placeholder field types
+app.get('/api/templates/placeholder-types', (req, res) => {
+  res.json({
+    success: true,
+    placeholders: PLACEHOLDER_VALUES,
+    categories: {
+      personal: ['fullName', 'firstName', 'lastName', 'jobTitle', 'email', 'phone', 'address', 'city', 'zipCode', 'country'],
+      links: ['linkedin', 'website', 'github'],
+      summary: ['summary'],
+      experience: ['experienceHeader', 'companyName', 'position', 'dateRange', 'description'],
+      education: ['educationHeader', 'institution', 'degree', 'fieldOfStudy', 'graduationDate'],
+      skills: ['skillsHeader', 'skill'],
+      languages: ['languagesHeader', 'language'],
+      certifications: ['certificationsHeader', 'certification'],
+      projects: ['projectsHeader', 'projectName', 'projectDescription'],
+      references: ['referencesHeader', 'reference']
+    }
+  });
 });
 
 // ===== Stripe Billing API =====

@@ -121,7 +121,9 @@ class CVBuilder {
         const uploadPdfTemplateBtn = document.getElementById('upload-pdf-template-btn');
         const convertPdfToHtmlBtn = document.getElementById('convert-pdf-to-html-btn');
         const convertPdfToHtmlStrictBtn = document.getElementById('convert-pdf-to-html-strict-btn');
+        const convertPdfPipelineBtn = document.getElementById('convert-pdf-pipeline-btn');
         const pdfTemplateInput = document.getElementById('pdf-template-input');
+        const pdfPipelineInput = document.getElementById('pdf-pipeline-input');
 
         if (downloadBtn) downloadBtn.addEventListener('click', () => this.downloadCV());
         if (downloadDocxBtn) downloadDocxBtn.addEventListener('click', () => this.downloadDocx());
@@ -487,6 +489,53 @@ class CVBuilder {
             });
         }
 
+        // Server-side PDF Pipeline conversion (more reliable)
+        if (convertPdfPipelineBtn && pdfPipelineInput) {
+            convertPdfPipelineBtn.addEventListener('click', () => {
+                pdfPipelineInput.click();
+            });
+
+            pdfPipelineInput.addEventListener('change', async (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+
+                if (file.type !== 'application/pdf') {
+                    alert('Пожалуйста, выберите PDF файл');
+                    return;
+                }
+
+                try {
+                    // Show loading state
+                    convertPdfPipelineBtn.disabled = true;
+                    convertPdfPipelineBtn.textContent = 'Конвертация...';
+
+                    // Use new pipeline
+                    const result = await this.convertPdfWithPipeline(file, {
+                        usePlaceholders: true,
+                        useAI: true
+                    });
+
+                    if (result && result.html) {
+                        await this.showPipelineResult(result);
+
+                        // Show success message
+                        const fieldsCount = Object.keys(result.fieldBindings || {}).length;
+                        console.log(`PDF converted: ${result.metadata?.pages || 1} pages, ${fieldsCount} fields detected`);
+                    }
+
+                    if (optionsMenu) optionsMenu.classList.add('hidden');
+                } catch (err) {
+                    console.error('PDF Pipeline error:', err);
+                    alert((err && err.message) || 'Ошибка конвертации PDF');
+                } finally {
+                    // Restore button state
+                    convertPdfPipelineBtn.disabled = false;
+                    convertPdfPipelineBtn.textContent = '📄 PDF → HTML (Pipeline)';
+                    e.target.value = '';
+                }
+            });
+        }
+
         if (togglePreviewModeBtn) {
             const refreshLabel = () => {
                 const mode = this.previewMode === 'html' ? 'HTML → PDF' : 'PDF → HTML';
@@ -553,6 +602,211 @@ class CVBuilder {
             setTimeout(() => this.sendPreviewMessage(this.userData), 200);
             this.ensurePreviewVisible();
         } catch (_) { }
+    }
+
+    /**
+     * Convert PDF to HTML using server-side pipeline
+     * Uses: PDF parsing → Semantic analysis → HTML generation
+     */
+    async convertPdfWithPipeline(pdfFile, options = {}) {
+        const { usePlaceholders = true, useAI = true } = options;
+
+        try {
+            const formData = new FormData();
+            formData.append('pdf', pdfFile);
+            formData.append('usePlaceholders', usePlaceholders.toString());
+            formData.append('useAI', useAI.toString());
+
+            // Include current user data if not using placeholders
+            if (!usePlaceholders && this.userData) {
+                formData.append('userData', JSON.stringify(this.mapUserDataToFields()));
+            }
+
+            const response = await fetch('/api/templates/pdf-to-html', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.status === 401) {
+                this.redirectToAuthRequired();
+                return null;
+            }
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Ошибка конвертации PDF');
+            }
+
+            // Store field bindings for placeholder updates
+            this.pipelineFieldBindings = result.fieldBindings;
+            this.pipelinePlaceholders = result.placeholders;
+
+            return result;
+        } catch (err) {
+            console.error('PDF pipeline conversion error:', err);
+            throw err;
+        }
+    }
+
+    /**
+     * Map CVBuilder userData to placeholder field names
+     */
+    mapUserDataToFields() {
+        const pi = this.userData.personalInfo || {};
+        const mapped = {
+            fullName: [pi.firstName, pi.lastName].filter(Boolean).join(' ') || '',
+            firstName: pi.firstName || '',
+            lastName: pi.lastName || '',
+            jobTitle: pi.title || pi.jobTitle || '',
+            email: pi.email || '',
+            phone: pi.phone || '',
+            address: pi.address || '',
+            city: pi.city || '',
+            zipCode: pi.zip || pi.zipCode || '',
+            country: pi.country || '',
+            linkedin: pi.linkedin || '',
+            website: pi.website || '',
+            github: pi.github || '',
+            summary: pi.summary || pi.professionalSummary || ''
+        };
+
+        // Map employment to experience fields (first entry)
+        const employment = this.userData.employment || [];
+        if (employment.length > 0) {
+            const job = employment[0];
+            mapped.companyName = job.company || '';
+            mapped.position = job.position || job.title || '';
+            mapped.dateRange = [job.startDate, job.endDate].filter(Boolean).join(' - ') || '';
+            mapped.description = job.description || '';
+        }
+
+        // Map education (first entry)
+        const education = this.userData.education || [];
+        if (education.length > 0) {
+            const edu = education[0];
+            mapped.institution = edu.institution || edu.school || '';
+            mapped.degree = edu.degree || '';
+            mapped.fieldOfStudy = edu.field || edu.fieldOfStudy || '';
+            mapped.graduationDate = edu.graduationDate || edu.endDate || '';
+        }
+
+        // Map skills
+        const skills = this.userData.skills || [];
+        if (skills.length > 0) {
+            mapped.skill = skills.map(s => typeof s === 'string' ? s : s.name || s.skill).join(', ');
+        }
+
+        // Map languages
+        const languages = this.userData.languages || [];
+        if (languages.length > 0) {
+            mapped.language = languages.map(l => typeof l === 'string' ? l : l.name || l.language).join(', ');
+        }
+
+        return mapped;
+    }
+
+    /**
+     * Initialize PlaceholderEngine for an iframe
+     */
+    initPlaceholderEngine(iframe) {
+        if (!iframe || !iframe.contentWindow || !iframe.contentDocument) return null;
+
+        try {
+            const PlaceholderEngine = iframe.contentWindow.PlaceholderEngine;
+            if (!PlaceholderEngine) {
+                console.warn('PlaceholderEngine not available in iframe');
+                return null;
+            }
+
+            const engine = new PlaceholderEngine({
+                container: iframe.contentDocument.body,
+                onChange: (field, value, state) => {
+                    // Sync changes back to CVBuilder userData
+                    this.syncFromPlaceholder(field, value);
+                }
+            });
+
+            // Apply current userData
+            engine.setState(this.mapUserDataToFields());
+
+            return engine;
+        } catch (err) {
+            console.error('Failed to init PlaceholderEngine:', err);
+            return null;
+        }
+    }
+
+    /**
+     * Sync placeholder changes back to userData
+     */
+    syncFromPlaceholder(field, value) {
+        const pi = this.userData.personalInfo = this.userData.personalInfo || {};
+
+        const fieldMap = {
+            fullName: () => {
+                const parts = (value || '').split(' ');
+                pi.firstName = parts[0] || '';
+                pi.lastName = parts.slice(1).join(' ') || '';
+            },
+            firstName: () => { pi.firstName = value; },
+            lastName: () => { pi.lastName = value; },
+            jobTitle: () => { pi.title = value; },
+            email: () => { pi.email = value; },
+            phone: () => { pi.phone = value; },
+            address: () => { pi.address = value; },
+            city: () => { pi.city = value; },
+            zipCode: () => { pi.zip = value; },
+            country: () => { pi.country = value; },
+            linkedin: () => { pi.linkedin = value; },
+            website: () => { pi.website = value; },
+            github: () => { pi.github = value; },
+            summary: () => { pi.summary = value; }
+        };
+
+        if (fieldMap[field]) {
+            fieldMap[field]();
+            this.schedulePreviewUpdate();
+        }
+    }
+
+    /**
+     * Show converted HTML in preview with placeholder binding
+     */
+    async showPipelineResult(result) {
+        const frame = document.getElementById('live-preview-frame');
+        if (!frame) return;
+
+        // Save HTML and get URL
+        const saveResp = await fetch('/api/templates/save-html', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                html: result.html,
+                title: this.getDocumentTitle() || 'Resume'
+            })
+        });
+
+        if (saveResp.status === 401) {
+            this.redirectToAuthRequired();
+            return;
+        }
+
+        const saveResult = await saveResp.json();
+        if (!saveResult.success || !saveResult.url) {
+            throw new Error(saveResult.message || 'Не удалось сохранить HTML');
+        }
+
+        // Load in iframe
+        frame.src = saveResult.url;
+        this.ensurePreviewVisible();
+
+        // Initialize placeholder engine after load
+        frame.addEventListener('load', () => {
+            setTimeout(() => {
+                this.placeholderEngine = this.initPlaceholderEngine(frame);
+            }, 300);
+        }, { once: true });
     }
 
     setupSidebarUI() {
