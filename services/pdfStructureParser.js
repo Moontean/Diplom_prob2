@@ -4,13 +4,56 @@
 
 const fs = require('fs');
 const path = require('path');
+const { createCanvas, Image } = require('canvas');
 
 // Lazy-load pdfjs-dist to avoid startup issues
 let pdfjsLib = null;
 
+/**
+ * NodeCanvasFactory for PDF.js to work with node-canvas
+ */
+class NodeCanvasFactory {
+    create(width, height) {
+        const canvas = createCanvas(width, height);
+        const context = canvas.getContext('2d');
+        return {
+            canvas,
+            context
+        };
+    }
+
+    reset(canvasAndContext, width, height) {
+        canvasAndContext.canvas.width = width;
+        canvasAndContext.canvas.height = height;
+    }
+
+    destroy(canvasAndContext) {
+        canvasAndContext.canvas.width = 0;
+        canvasAndContext.canvas.height = 0;
+        canvasAndContext.canvas = null;
+        canvasAndContext.context = null;
+    }
+}
+
+/**
+ * NodeCanvasFactory with image support for PDF.js
+ */
+class NodeCanvasFactoryWithImages extends NodeCanvasFactory {
+    createImage() {
+        const img = new Image();
+        return img;
+    }
+}
+
 async function ensurePdfJs() {
     if (pdfjsLib) return;
     try {
+        // Make Image available globally for PDF.js
+        if (typeof global.Image === 'undefined') {
+            global.Image = Image;
+            console.log('✅ Global Image class set from node-canvas');
+        }
+
         // Use legacy build for Node.js compatibility
         pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -33,6 +76,302 @@ async function ensurePdfJs() {
         console.error('Failed to load pdfjs-dist:', err.message);
         throw new Error('pdfjs-dist initialization failed');
     }
+}
+
+/**
+ * Render PDF page to canvas and return as base64 image
+ * @param {Object} page - PDF.js page object
+ * @param {number} scale - Render scale (default 2.0 for display, 0.5 for AI)
+ * @param {Object} options - Options: { forAI: boolean, quality: number }
+ * @returns {Promise<string>} Base64 encoded image
+ */
+async function renderPageToImage(page, scale = 2.0, options = {}) {
+    const { forAI = false, quality = 0.7 } = options;
+    // Use lower scale for AI to reduce token count
+    const effectiveScale = forAI ? Math.min(scale, 0.5) : scale;
+
+    try {
+        console.log(`\n🎨 Starting renderPageToImage with scale: ${effectiveScale} (forAI: ${forAI})`);
+        const viewport = page.getViewport({ scale: effectiveScale });
+        console.log(`📐 Viewport size: ${viewport.width}x${viewport.height}`);
+
+        const canvasFactory = new NodeCanvasFactoryWithImages();
+        const canvasAndContext = canvasFactory.create(viewport.width, viewport.height);
+        const { canvas, context } = canvasAndContext;
+        console.log(`✅ Canvas created via NodeCanvasFactoryWithImages`);
+
+        // Set white background
+        context.fillStyle = 'white';
+        context.fillRect(0, 0, viewport.width, viewport.height);
+        console.log(`✅ White background set`);
+
+        console.log(`🖼️ Starting page.render()...`);
+        await page.render({
+            canvasContext: context,
+            viewport: viewport,
+            canvasFactory: canvasFactory,
+            background: 'white',
+            // Disable ImageBitmap API (not available in Node.js)
+            enableImageBitmaps: false
+        }).promise;
+        console.log(`✅ page.render() completed`);
+
+        // Convert canvas to base64
+        // Use JPEG for AI (smaller size) or PNG for display (better quality)
+        console.log(`📦 Converting to buffer...`);
+        let buffer, mimeType;
+        if (forAI) {
+            buffer = canvas.toBuffer('image/jpeg', { quality });
+            mimeType = 'image/jpeg';
+        } else {
+            buffer = canvas.toBuffer('image/png');
+            mimeType = 'image/png';
+        }
+        console.log(`✅ Buffer created: ${buffer.length} bytes (${mimeType})`);
+
+        const base64 = `data:${mimeType};base64,${buffer.toString('base64')}`;
+        console.log(`✅ Base64 created: ${base64.length} chars`);
+
+        // Cleanup
+        canvasFactory.destroy(canvasAndContext);
+
+        return base64;
+    } catch (err) {
+        console.error('❌ Error rendering page to image:', err.message);
+        console.error('❌ Stack:', err.stack);
+        throw err;
+    }
+}
+
+/**
+ * Convert RGB values (0-1) to hex color
+ */
+function rgbToHex(r, g, b) {
+    const toHex = (n) => Math.round(n * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+/**
+ * Extract text colors from PDF operator list
+ */
+async function extractTextColors(page) {
+    try {
+        const operatorList = await page.getOperatorList();
+        const colors = [];
+        let currentColor = '#000000';
+
+        for (let i = 0; i < operatorList.fnArray.length; i++) {
+            const fn = operatorList.fnArray[i];
+            const args = operatorList.argsArray[i];
+
+            // OPS.setFillRGBColor
+            if (fn === 19 && args.length === 3) {
+                const [r, g, b] = args;
+                currentColor = rgbToHex(r, g, b);
+                colors.push(currentColor);
+            }
+            // OPS.setFillGray
+            else if (fn === 21 && args.length === 1) {
+                const gray = Math.round(args[0] * 255);
+                const hex = gray.toString(16).padStart(2, '0');
+                currentColor = `#${hex}${hex}${hex}`;
+                colors.push(currentColor);
+            }
+            // OPS.showText or similar - associate color with text
+            else if ([17, 18, 27, 28].includes(fn)) {
+                colors.push(currentColor);
+            }
+        }
+
+        return colors;
+    } catch (err) {
+        console.warn('Could not extract colors:', err.message);
+        return [];
+    }
+}
+
+/**
+ * PDF.js OPS constants for reference
+ */
+const OPS = {
+    setFillRGBColor: 19,
+    setStrokeRGBColor: 20,
+    setFillGray: 21,
+    setStrokeGray: 22,
+    setFillCMYKColor: 23,
+    setStrokeCMYKColor: 24,
+    fill: 18,
+    eoFill: 81,
+    fillStroke: 82,
+    constructPath: 91,
+    rectangle: 92,
+    transform: 12,
+    save: 10,
+    restore: 11
+};
+
+/**
+ * Extract background shapes (rectangles, paths) with colors from PDF
+ * @param {Object} page - PDF.js page object
+ * @param {Object} viewport - PDF viewport for coordinate conversion
+ * @returns {Promise<Array>} Array of background elements
+ */
+async function extractBackgrounds(page, viewport) {
+    const backgrounds = [];
+
+    try {
+        const operatorList = await page.getOperatorList();
+        const { fnArray, argsArray } = operatorList;
+
+        // State tracking
+        let currentFillColor = '#ffffff';
+        let currentPath = [];
+        let transformMatrix = [1, 0, 0, 1, 0, 0]; // Identity matrix
+        const transformStack = [];
+
+        for (let i = 0; i < fnArray.length; i++) {
+            const fn = fnArray[i];
+            const args = argsArray[i];
+
+            switch (fn) {
+                // Save/Restore graphics state
+                case OPS.save:
+                    transformStack.push([...transformMatrix]);
+                    break;
+                case OPS.restore:
+                    if (transformStack.length > 0) {
+                        transformMatrix = transformStack.pop();
+                    }
+                    break;
+
+                // Set fill color
+                case OPS.setFillRGBColor:
+                    if (args.length >= 3) {
+                        currentFillColor = rgbToHex(args[0], args[1], args[2]);
+                    }
+                    break;
+                case OPS.setFillGray:
+                    if (args.length >= 1) {
+                        const gray = Math.round(args[0] * 255);
+                        const hex = gray.toString(16).padStart(2, '0');
+                        currentFillColor = `#${hex}${hex}${hex}`;
+                    }
+                    break;
+                case OPS.setFillCMYKColor:
+                    // Convert CMYK to RGB (simplified)
+                    if (args.length >= 4) {
+                        const [c, m, y, k] = args;
+                        const r = 1 - Math.min(1, c * (1 - k) + k);
+                        const g = 1 - Math.min(1, m * (1 - k) + k);
+                        const b = 1 - Math.min(1, y * (1 - k) + k);
+                        currentFillColor = rgbToHex(r, g, b);
+                    }
+                    break;
+
+                // Rectangle
+                case OPS.rectangle:
+                    if (args.length >= 4) {
+                        const [x, y, w, h] = args;
+                        currentPath.push({
+                            type: 'rect',
+                            x, y, w, h
+                        });
+                    }
+                    break;
+
+                // Construct path (moveTo, lineTo, etc.)
+                case OPS.constructPath:
+                    if (args && args[0] && args[1]) {
+                        const ops = args[0]; // Array of path operations
+                        const pathArgs = args[1]; // Array of arguments
+                        let argIndex = 0;
+                        let minX = Infinity, minY = Infinity;
+                        let maxX = -Infinity, maxY = -Infinity;
+
+                        for (const op of ops) {
+                            // Extract bounding box from path
+                            if (op === 13 || op === 14) { // moveTo, lineTo
+                                const px = pathArgs[argIndex++];
+                                const py = pathArgs[argIndex++];
+                                minX = Math.min(minX, px);
+                                minY = Math.min(minY, py);
+                                maxX = Math.max(maxX, px);
+                                maxY = Math.max(maxY, py);
+                            } else if (op === 15) { // curveTo (bezier)
+                                argIndex += 6; // Skip 6 args
+                            } else if (op === 18) { // rectangle
+                                const rx = pathArgs[argIndex++];
+                                const ry = pathArgs[argIndex++];
+                                const rw = pathArgs[argIndex++];
+                                const rh = pathArgs[argIndex++];
+                                minX = Math.min(minX, rx);
+                                minY = Math.min(minY, ry);
+                                maxX = Math.max(maxX, rx + rw);
+                                maxY = Math.max(maxY, ry + rh);
+                            }
+                        }
+
+                        if (minX !== Infinity && maxX !== -Infinity) {
+                            currentPath.push({
+                                type: 'path',
+                                x: minX,
+                                y: minY,
+                                w: maxX - minX,
+                                h: maxY - minY
+                            });
+                        }
+                    }
+                    break;
+
+                // Fill operations - commit current path as background
+                case OPS.fill:
+                case OPS.eoFill:
+                case OPS.fillStroke:
+                    for (const shape of currentPath) {
+                        // Convert PDF coordinates to HTML (top-left origin)
+                        const htmlY = viewport.height - shape.y - shape.h;
+
+                        // Filter out very small shapes and pure white backgrounds
+                        if (shape.w > 5 && shape.h > 5 && currentFillColor !== '#ffffff') {
+                            backgrounds.push({
+                                id: `bg_${backgrounds.length}`,
+                                type: shape.type,
+                                color: currentFillColor,
+                                bbox: {
+                                    x: Math.round(shape.x * 100) / 100,
+                                    y: Math.round(htmlY * 100) / 100,
+                                    width: Math.round(shape.w * 100) / 100,
+                                    height: Math.round(shape.h * 100) / 100
+                                }
+                            });
+                        }
+                    }
+                    currentPath = []; // Clear path after fill
+                    break;
+            }
+        }
+
+        console.log(`🎨 Extracted ${backgrounds.length} background elements`);
+        return backgrounds;
+
+    } catch (err) {
+        console.warn('Could not extract backgrounds:', err.message);
+        return [];
+    }
+}
+
+/**
+ * Determine font weight from font name
+ */
+function getFontWeight(fontName) {
+    if (!fontName) return 'normal';
+    const name = fontName.toLowerCase();
+    if (name.includes('bold')) return 'bold';
+    if (name.includes('heavy') || name.includes('black')) return '900';
+    if (name.includes('semibold')) return '600';
+    if (name.includes('medium')) return '500';
+    if (name.includes('light')) return '300';
+    return 'normal';
 }
 
 /**
@@ -79,12 +418,47 @@ async function parsePdfStructure(pdfInput) {
         const viewport = page.getViewport({ scale: 1.0 });
         const textContent = await page.getTextContent();
 
+        // Render page to image for background (includes colors, graphics, etc.)
+        console.log(`\n📄 ========== Processing page ${pageNum} ==========`);
+        let backgroundImage = null;
+        let aiImage = null; // Compressed version for AI analysis
+        try {
+            console.log(`🚀 Calling renderPageToImage for page ${pageNum}...`);
+            backgroundImage = await renderPageToImage(page, 2.0);
+
+            // Also render a smaller version for AI (to fit in context window)
+            aiImage = await renderPageToImage(page, 2.0, { forAI: true, quality: 0.6 });
+
+            if (backgroundImage) {
+                console.log(`✅ Page ${pageNum}: Background image rendered successfully`);
+                console.log(`   📊 Image length: ${backgroundImage.length} chars`);
+            }
+            if (aiImage) {
+                console.log(`✅ Page ${pageNum}: AI image rendered successfully`);
+                console.log(`   📊 AI Image length: ${aiImage.length} chars`);
+            }
+        } catch (err) {
+            console.error(`❌ Failed to render page ${pageNum} as image:`, err.message);
+            console.error(`❌ Error stack:`, err.stack);
+            // Continue without background image
+        }
+
         const pageData = {
             pageNumber: pageNum,
             width: viewport.width,
             height: viewport.height,
+            backgroundImage: backgroundImage, // Base64 PNG image with all visual elements (null if render failed)
+            aiImage: aiImage, // Compressed JPEG for AI analysis
+            backgrounds: [], // Extracted background shapes with colors
             blocks: []
         };
+
+        // Extract background shapes (rectangles, colored areas)
+        try {
+            pageData.backgrounds = await extractBackgrounds(page, viewport);
+        } catch (err) {
+            console.warn(`⚠️ Could not extract backgrounds for page ${pageNum}:`, err.message);
+        }
 
         let blockId = 0;
 
@@ -107,11 +481,10 @@ async function parsePdfStructure(pdfInput) {
             const width = item.width || (item.str.length * fontSize * 0.6);
             const height = fontSize * 1.2;
 
-            // Detect font weight from font name
+            // Get font properties
             const fontName = item.fontName || '';
-            const isBold = /bold|black|heavy|semibold|medium/i.test(fontName);
+            const fontWeight = getFontWeight(fontName);
             const isItalic = /italic|oblique/i.test(fontName);
-            const fontWeight = isBold ? 700 : 400;
             const fontStyle = isItalic ? 'italic' : 'normal';
 
             // Normalize font family
@@ -140,7 +513,7 @@ async function parsePdfStructure(pdfInput) {
                     original: fontName
                 },
                 transform: transform,
-                color: '#000000' // Default, can be enhanced with operator list parsing
+                color: 'transparent' // Text will be transparent, visible through background image
             });
         }
 
@@ -357,17 +730,43 @@ function escapeHtml(text) {
 }
 
 /**
- * Convert parsed PDF structure to HTML with absolute positioning
+ * Convert parsed PDF structure to HTML with background image and transparent selectable text
  * @param {Object} structure - Parsed PDF structure
- * @returns {string} HTML string with positioned blocks
+ * @returns {string} HTML string with positioned, selectable blocks
  */
 function convertToHtml(structure) {
-    let html = '<div class="pdf-container" style="position: relative; background: #f5f5f5; padding: 20px;">\n';
+    // Add CSS for text selection visibility
+    const css = `
+        <style>
+            .text-block::selection {
+                background: rgba(0, 123, 255, 0.3);
+                color: #000000 !important;
+            }
+            .text-block::-moz-selection {
+                background: rgba(0, 123, 255, 0.3);
+                color: #000000 !important;
+            }
+        </style>
+    `;
+
+    let html = css + '<div class="pdf-container" style="position: relative; background: #f5f5f5; padding: 20px;">\n';
 
     for (const page of structure.pages) {
-        html += `  <div class="pdf-page" style="width: ${page.width}px; height: ${page.height}px; position: relative; background: white; border: 1px solid #ccc; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">\n`;
+        // Build background style
+        const bgStyle = page.backgroundImage
+            ? `background-image: url('${page.backgroundImage}'); background-size: ${page.width}px ${page.height}px; background-repeat: no-repeat;`
+            : 'background: white;';
+
+        // If no background image, make text visible (black)
+        const hasBackground = !!page.backgroundImage;
+        console.log(`Page has background: ${hasBackground}, length: ${page.backgroundImage ? page.backgroundImage.length : 0}`);
+
+        html += `  <div class="pdf-page" style="width: ${page.width}px; height: ${page.height}px; position: relative; ${bgStyle} border: 1px solid #ccc; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">\n`;
 
         for (const block of page.blocks) {
+            // Use transparent text only if background image exists, otherwise use black
+            const textColor = hasBackground ? 'transparent' : '#000000';
+
             const style = [
                 'position: absolute',
                 `left: ${block.bbox.x}px`,
@@ -377,10 +776,18 @@ function convertToHtml(structure) {
                 `font-style: ${block.font.style}`,
                 `font-family: ${block.font.family}`,
                 'white-space: nowrap',
-                `color: ${block.color}`
+                `color: ${textColor}`,
+                'cursor: text',
+                'user-select: text',
+                '-webkit-user-select: text',
+                '-moz-user-select: text',
+                '-ms-user-select: text'
             ].join('; ');
 
-            html += `    <div style="${style}">${escapeHtml(block.text)}</div>\n`;
+            const fieldType = block.semanticHint || block.fieldType || 'text';
+            const dataAttrs = `data-field-type="${fieldType}" data-selectable="true" data-block-id="${block.id || ''}" data-original-text="${escapeHtml(block.text)}"`;
+
+            html += `    <div class="text-block selectable-field" style="${style}" ${dataAttrs}>${escapeHtml(block.text)}</div>\n`;
         }
 
         html += '  </div>\n';
@@ -397,5 +804,9 @@ module.exports = {
     detectFieldType,
     addSemanticHints,
     convertToHtml,
-    escapeHtml
+    escapeHtml,
+    renderPageToImage,
+    extractTextColors,
+    getFontWeight,
+    rgbToHex
 };

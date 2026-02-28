@@ -362,10 +362,12 @@ app.post('/api/templates/analyze-semantic', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Структура PDF не предоставлена' });
     }
 
-    const options = { useAI };
-    if (pdfPath && fs.existsSync(pdfPath)) {
-      options.pdfPath = pdfPath;
-    }
+    // Use first page's backgroundImage if available for better AI analysis
+    const imageBase64 = structure?.pages?.[0]?.backgroundImage || null;
+    const options = {
+      useAI,
+      imageBase64
+    };
 
     const semantics = await analyzeSemantics(structure, options);
 
@@ -394,22 +396,46 @@ app.post('/api/templates/pdf-to-html', pdfUpload.single('pdf'), async (req, res)
       if (!pdfPath) {
         return res.status(400).json({ success: false, message: 'PDF файл или структура не предоставлены' });
       }
+      console.log('Parsing PDF structure from:', pdfPath);
       structure = await parsePdfStructure(pdfPath);
+      console.log('PDF structure parsed successfully, pages:', structure.pages?.length);
     }
 
     // Step 2: Semantic analysis
+    // Find first page with a valid compressed AI image for analysis
+    let imageBase64 = null;
+    if (structure?.pages) {
+      for (const page of structure.pages) {
+        // Prefer compressed AI image
+        if (page.aiImage && page.aiImage.startsWith('data:image')) {
+          imageBase64 = page.aiImage;
+          console.log(`Using compressed aiImage from page ${structure.pages.indexOf(page) + 1} (${imageBase64.length} chars)`);
+          break;
+        }
+        // Fallback to backgroundImage
+        if (page.backgroundImage && page.backgroundImage.startsWith('data:image')) {
+          imageBase64 = page.backgroundImage;
+          console.log(`Using backgroundImage from page ${structure.pages.indexOf(page) + 1} (${imageBase64.length} chars)`);
+          break;
+        }
+      }
+    }
+    console.log('Starting semantic analysis...', imageBase64 ? 'with image' : 'text-only');
     const semantics = await analyzeSemantics(structure, {
       useAI,
-      pdfPath
+      imageBase64
     });
+    console.log('Semantic analysis completed');
 
     // Step 3: Generate HTML
+    console.log('Generating HTML...');
     const html = generateHtmlDocument(structure, semantics, {
       usePlaceholders,
       includeDataAttributes: true,
       userData,
       cssInline: true
     });
+    console.log('HTML generated successfully');
 
     // Get field bindings for frontend
     const fieldBindings = getFieldBindings(semantics);
@@ -432,6 +458,7 @@ app.post('/api/templates/pdf-to-html', pdfUpload.single('pdf'), async (req, res)
     });
   } catch (err) {
     console.error('Ошибка конвертации PDF в HTML:', err);
+    console.error('Stack trace:', err.stack);
     res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
   }
 });

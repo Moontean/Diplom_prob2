@@ -283,10 +283,12 @@ function analyzeWithHeuristics(structure) {
  * @returns {Promise<Object>} Semantic mapping
  */
 async function analyzeWithAI(structure, imageBase64 = null) {
-    // Flatten blocks from all pages
+    // Flatten blocks from all pages - limit to prevent token overflow
     const allBlocks = [];
     for (const page of structure.pages) {
-        allBlocks.push(...page.blocks.slice(0, 50)); // Limit to prevent token overflow
+        // Take only first 20 blocks per page to stay within context limits
+        allBlocks.push(...page.blocks.slice(0, 20));
+        if (allBlocks.length >= 30) break; // Max 30 blocks total for AI
     }
 
     // Try Gemini first (better multimodal support)
@@ -426,12 +428,41 @@ function mergeStructureWithSemantics(structure, semantics) {
 /**
  * Full semantic analysis pipeline
  * @param {Object} structure - Parsed PDF structure from pdfStructureParser
- * @param {string} imageBase64 - Optional base64 image for better analysis
- * @param {boolean} useAI - Whether to use AI (default: true, fallback to heuristics if unavailable)
+ * @param {Object|string} options - Options object or base64 image string for backward compatibility
  * @returns {Promise<Object>} Structure with semantic annotations
  */
-async function analyzeSemantics(structure, imageBase64 = null, useAI = true) {
+async function analyzeSemantics(structure, options = {}) {
     let semantics;
+    let imageBase64 = null;
+    let useAI = true;
+
+    // Handle backward compatibility: if options is a string, treat it as imageBase64
+    if (typeof options === 'string') {
+        imageBase64 = options;
+    } else if (options && typeof options === 'object') {
+        useAI = options.useAI !== false;
+        imageBase64 = options.imageBase64 || null;
+
+        // If no explicit imageBase64 provided, try to get it from structure's pages
+        // Prefer aiImage (compressed) over backgroundImage for token efficiency
+        if (!imageBase64 && structure?.pages) {
+            // Find first page with a valid aiImage or backgroundImage
+            for (const page of structure.pages) {
+                // Prefer compressed AI image
+                if (page.aiImage && page.aiImage.startsWith('data:image')) {
+                    imageBase64 = page.aiImage;
+                    console.log(`Using compressed aiImage from page ${structure.pages.indexOf(page) + 1} for semantic analysis`);
+                    break;
+                }
+                // Fallback to backgroundImage
+                if (page.backgroundImage && page.backgroundImage.startsWith('data:image')) {
+                    imageBase64 = page.backgroundImage;
+                    console.log(`Using backgroundImage from page ${structure.pages.indexOf(page) + 1} for semantic analysis`);
+                    break;
+                }
+            }
+        }
+    }
 
     if (useAI) {
         semantics = await analyzeWithAI(structure, imageBase64);

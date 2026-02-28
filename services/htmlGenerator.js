@@ -2,49 +2,32 @@
  * HTML/CSS Generator Service
  * 
  * Converts parsed PDF structure + semantic analysis into production HTML/CSS
- * with absolute positioning and placeholder data attributes.
+ * with absolute positioning and data attributes for field binding.
  * 
- * Key principle: Geometry from PDF parser, semantics from AI analyzer
+ * Key principles:
+ * - Geometry from PDF parser
+ * - Semantics from AI analyzer  
+ * - NO text placeholders ({{...}}) in HTML output!
+ * - Data binding via JavaScript + data-field attributes
  */
 
-const PLACEHOLDER_VALUES = {
-    fullName: '{{FULL_NAME}}',
-    firstName: '{{FIRST_NAME}}',
-    lastName: '{{LAST_NAME}}',
-    jobTitle: '{{JOB_TITLE}}',
-    email: '{{EMAIL}}',
-    phone: '{{PHONE}}',
-    address: '{{ADDRESS}}',
-    city: '{{CITY}}',
-    zipCode: '{{ZIP_CODE}}',
-    country: '{{COUNTRY}}',
-    linkedin: '{{LINKEDIN}}',
-    website: '{{WEBSITE}}',
-    github: '{{GITHUB}}',
-    summary: '{{SUMMARY}}',
-    experienceHeader: '{{EXPERIENCE_HEADER}}',
-    companyName: '{{COMPANY_NAME}}',
-    position: '{{POSITION}}',
-    dateRange: '{{DATE_RANGE}}',
-    description: '{{DESCRIPTION}}',
-    educationHeader: '{{EDUCATION_HEADER}}',
-    institution: '{{INSTITUTION}}',
-    degree: '{{DEGREE}}',
-    fieldOfStudy: '{{FIELD_OF_STUDY}}',
-    graduationDate: '{{GRADUATION_DATE}}',
-    skillsHeader: '{{SKILLS_HEADER}}',
-    skill: '{{SKILL}}',
-    languagesHeader: '{{LANGUAGES_HEADER}}',
-    language: '{{LANGUAGE}}',
-    certificationsHeader: '{{CERTIFICATIONS_HEADER}}',
-    certification: '{{CERTIFICATION}}',
-    projectsHeader: '{{PROJECTS_HEADER}}',
-    projectName: '{{PROJECT_NAME}}',
-    projectDescription: '{{PROJECT_DESC}}',
-    referencesHeader: '{{REFERENCES_HEADER}}',
-    reference: '{{REFERENCE}}',
-    unknown: '{{TEXT}}'
-};
+/**
+ * Supported CV field types for semantic mapping
+ * Used for validation and documentation, NOT for text output
+ */
+const CV_FIELD_TYPES = [
+    'fullName', 'firstName', 'lastName', 'jobTitle',
+    'email', 'phone', 'address', 'city', 'zipCode', 'country',
+    'linkedin', 'website', 'github', 'summary',
+    'experienceHeader', 'companyName', 'position', 'dateRange', 'description',
+    'educationHeader', 'institution', 'degree', 'fieldOfStudy', 'graduationDate',
+    'skillsHeader', 'skill',
+    'languagesHeader', 'language',
+    'certificationsHeader', 'certification',
+    'projectsHeader', 'projectName', 'projectDescription',
+    'referencesHeader', 'reference',
+    'unknown'
+];
 
 /**
  * Generate complete HTML document from parsed structure and semantics
@@ -86,29 +69,125 @@ function generateHtmlDocument(parsedStructure, semanticAnalysis, options = {}) {
         ${htmlPages}
     </div>
     <script>
-        // Placeholder binding system
-        window.CVPlaceholders = {
+        /**
+         * CV Field Binding System
+         * 
+         * KEY PRINCIPLE: Direct DOM manipulation, no text placeholders!
+         * - State lives in JavaScript object
+         * - Updates happen via querySelectorAll + textContent
+         * - No magic, no frameworks, pure DOM
+         */
+        window.CVFields = {
+            // Internal state
+            _state: {},
+            
+            /**
+             * Update a single field in all matching elements
+             * @param {string} fieldName - Field type (e.g., 'fullName', 'email')
+             * @param {string} value - New value to display
+             */
             update: function(fieldName, value) {
+                this._state[fieldName] = value;
                 const elements = document.querySelectorAll('[data-field="' + fieldName + '"]');
-                elements.forEach(el => {
-                    el.textContent = value || el.dataset.placeholder;
+                elements.forEach(function(el) {
+                    el.textContent = value || '';
+                    // Remove needs-data flag if value provided
+                    if (value) {
+                        el.removeAttribute('data-needs-data');
+                    }
                 });
             },
+            
+            /**
+             * Update multiple fields at once
+             * @param {Object} data - Object with field:value pairs
+             */
             updateAll: function(data) {
-                Object.entries(data).forEach(([field, value]) => {
-                    this.update(field, value);
+                var self = this;
+                Object.keys(data).forEach(function(field) {
+                    self.update(field, data[field]);
                 });
             },
-            getData: function() {
-                const data = {};
-                document.querySelectorAll('[data-field]').forEach(el => {
-                    const field = el.dataset.field;
-                    if (!data[field]) data[field] = [];
-                    data[field].push(el.textContent);
+            
+            /**
+             * Get current state of all fields
+             * @returns {Object} Current field values
+             */
+            getState: function() {
+                return Object.assign({}, this._state);
+            },
+            
+            /**
+             * Get data from DOM (useful after user edits)
+             * @returns {Object} Field values from DOM
+             */
+            getFromDOM: function() {
+                var data = {};
+                document.querySelectorAll('[data-field]').forEach(function(el) {
+                    var field = el.dataset.field;
+                    var text = el.textContent.trim();
+                    if (text && field !== 'unknown') {
+                        if (!data[field]) {
+                            data[field] = text;
+                        } else if (Array.isArray(data[field])) {
+                            data[field].push(text);
+                        } else {
+                            data[field] = [data[field], text];
+                        }
+                    }
                 });
                 return data;
+            },
+            
+            /**
+             * Reset field to original PDF value
+             * @param {string} fieldName - Field to reset
+             */
+            resetToOriginal: function(fieldName) {
+                var elements = document.querySelectorAll('[data-field="' + fieldName + '"]');
+                elements.forEach(function(el) {
+                    var original = el.dataset.original || '';
+                    el.textContent = original;
+                });
+                delete this._state[fieldName];
+            },
+            
+            /**
+             * Get list of all field types in document
+             * @returns {Array} Unique field types
+             */
+            getFieldTypes: function() {
+                var types = new Set();
+                document.querySelectorAll('[data-field]').forEach(function(el) {
+                    var field = el.dataset.field;
+                    if (field && field !== 'unknown') {
+                        types.add(field);
+                    }
+                });
+                return Array.from(types);
+            },
+            
+            /**
+             * Make all editable fields contenteditable
+             */
+            enableEditing: function() {
+                document.querySelectorAll('[data-editable="true"]').forEach(function(el) {
+                    el.contentEditable = 'true';
+                });
+            },
+            
+            /**
+             * Disable editing mode
+             */
+            disableEditing: function() {
+                document.querySelectorAll('[contenteditable="true"]').forEach(function(el) {
+                    el.contentEditable = 'false';
+                });
             }
         };
+        
+        // Legacy alias for backward compatibility
+        window.CVPlaceholders = window.CVFields;
     </script>
 </body>
 </html>`;
@@ -158,17 +237,26 @@ body {
     page-break-after: avoid;
 }
 
+/* Background elements (extracted from PDF) */
+.cv-background {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+}
+
 .cv-block {
     position: absolute;
     white-space: pre-wrap;
     overflow: hidden;
     line-height: 1.2;
+    z-index: 1;
 }
 
 .cv-line {
     position: absolute;
     white-space: nowrap;
     overflow: visible;
+    z-index: 1;
 }
 
 /* Field-specific styling */
@@ -185,22 +273,49 @@ body {
     text-transform: uppercase;
 }
 
-/* Placeholder styling */
-[data-is-placeholder="true"] {
-    color: #666;
-    background: rgba(255, 235, 59, 0.2);
-    border-radius: 2px;
-    padding: 0 2px;
+/* Empty field indicator - shows hint when no user data */
+[data-needs-data="true"]:empty::before {
+    content: attr(data-field);
+    color: #999;
+    font-style: italic;
+    opacity: 0.7;
 }
 
-[data-is-placeholder="true"]:hover {
-    background: rgba(255, 235, 59, 0.4);
+/* Highlight fields that need data */
+[data-needs-data="true"] {
+    background: rgba(255, 235, 59, 0.15);
+    border-radius: 2px;
+    min-width: 50px;
+    min-height: 1em;
+}
+
+[data-needs-data="true"]:hover {
+    background: rgba(255, 235, 59, 0.3);
 }
 
 /* Editable mode */
-.cv-block[contenteditable="true"]:focus {
+.cv-block[contenteditable="true"]:focus,
+.cv-line[contenteditable="true"]:focus,
+.editable-field:focus {
     outline: 2px solid #2196F3;
     background: rgba(33, 150, 243, 0.05);
+}
+
+/* Text selection styling */
+.cv-block::selection,
+.cv-line::selection,
+.editable-field::selection,
+.text-block::selection {
+    background: rgba(0, 123, 255, 0.3);
+    color: #000000 !important;
+}
+
+.cv-block::-moz-selection,
+.cv-line::-moz-selection,
+.editable-field::-moz-selection,
+.text-block::-moz-selection {
+    background: rgba(0, 123, 255, 0.3);
+    color: #000000 !important;
 }
 
 /* Print styles */
@@ -214,8 +329,13 @@ body {
         box-shadow: none;
     }
     
-    [data-is-placeholder="true"] {
+    /* Hide empty field hints in print */
+    [data-needs-data="true"] {
         background: transparent;
+    }
+    
+    [data-needs-data="true"]:empty::before {
+        display: none;
     }
 }
 `;
@@ -228,6 +348,12 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
     const { usePlaceholders, includeDataAttributes, userData } = options;
     const lines = page.lines || [];
     const blocks = page.blocks || [];
+    const backgrounds = page.backgrounds || [];
+
+    // Generate background elements first (they go behind text)
+    let backgroundsHtml = backgrounds.map((bg, idx) => {
+        return `        <div class="cv-background" data-bg-id="${bg.id}" style="position: absolute; left: ${bg.bbox.x}px; top: ${bg.bbox.y}px; width: ${bg.bbox.width}px; height: ${bg.bbox.height}px; background-color: ${bg.color}; z-index: 0;"></div>`;
+    }).join('\n');
 
     // Prefer lines if available, fallback to blocks
     const elements = lines.length > 0 ? lines : blocks;
@@ -249,14 +375,36 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
         });
     }).join('\n');
 
+    // Build page style - use backgrounds as base, background image only as fallback
+    let pageStyle = `position: relative; width: ${page.width}px; height: ${page.height}px; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);`;
+
+    // Only use background image if no extracted backgrounds OR as fallback layer
+    if (page.backgroundImage) {
+        if (backgrounds.length === 0) {
+            // No extracted backgrounds - use image as main background
+            pageStyle += ` background-image: url('${page.backgroundImage}'); background-size: ${page.width}px ${page.height}px; background-repeat: no-repeat;`;
+        } else {
+            // Have extracted backgrounds - use image at lower opacity as fallback
+            pageStyle += ` background-color: white;`;
+        }
+    } else {
+        pageStyle += ` background: white;`;
+    }
+
     return `
-    <div class="cv-page" data-page="${pageIndex}" style="position: relative; width: ${page.width}px; height: ${page.height}px; background: white; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div class="cv-page" data-page="${pageIndex}" style="${pageStyle}">
+        ${backgroundsHtml}
         ${elementsHtml}
     </div>`;
 }
 
 /**
  * Generate HTML for a single text element (block or line)
+ * 
+ * KEY PRINCIPLE: NO text placeholders like {{FULL_NAME}} in HTML!
+ * - Display either user data (if provided) or original PDF text
+ * - Use data-attributes for field binding
+ * - JavaScript will update text via direct DOM manipulation
  */
 function generateElementHtml(element, options) {
     const {
@@ -270,41 +418,38 @@ function generateElementHtml(element, options) {
     } = options;
 
     const bbox = element.bbox;
-    const text = element.text || '';
+    const originalText = element.text || '';
     const font = element.font || {};
 
-    // Determine display text
-    let displayText = text;
-    let isPlaceholder = false;
+    // Determine display text - NEVER use {{}} placeholders!
+    // Priority: userData > originalText > empty
+    let displayText = originalText;
+    let hasUserData = false;
 
-    if (usePlaceholders && fieldType !== 'unknown') {
-        // Check if user has provided data for this field
-        if (userData && userData[fieldType]) {
-            displayText = userData[fieldType];
-        } else {
-            displayText = PLACEHOLDER_VALUES[fieldType] || `{{${fieldType.toUpperCase()}}}`;
-            isPlaceholder = true;
-        }
+    if (fieldType !== 'unknown' && userData && userData[fieldType]) {
+        displayText = userData[fieldType];
+        hasUserData = true;
     }
 
-    // Build style
-    const style = buildElementStyle(bbox, font);
+    // Build style - text is ALWAYS visible (not transparent)
+    const style = buildElementStyle(bbox, font, true);
 
-    // Build data attributes
+    // Build data attributes for binding
     let dataAttrs = '';
     if (includeDataAttributes) {
         dataAttrs = ` data-block-id="${blockId}"`;
         dataAttrs += ` data-field="${fieldType}"`;
         dataAttrs += ` data-confidence="${confidence.toFixed(2)}"`;
-        dataAttrs += ` data-original="${escapeHtml(text)}"`;
-        if (isPlaceholder) {
-            dataAttrs += ` data-is-placeholder="true"`;
-            dataAttrs += ` data-placeholder="${escapeHtml(displayText)}"`;
+        dataAttrs += ` data-original="${escapeHtml(originalText)}"`;
+        dataAttrs += ` data-editable="true"`;
+        // Mark if field is empty (no user data and we want placeholders)
+        if (usePlaceholders && !hasUserData && fieldType !== 'unknown') {
+            dataAttrs += ` data-needs-data="true"`;
         }
     }
 
     // Use line class if element has multiple items, block otherwise
-    const className = element.items ? 'cv-line' : 'cv-block';
+    const className = element.items ? 'cv-line editable-field' : 'cv-block editable-field';
 
     return `        <div class="${className}"${dataAttrs} style="${style}">${escapeHtml(displayText)}</div>`;
 }
@@ -312,7 +457,7 @@ function generateElementHtml(element, options) {
 /**
  * Build inline style for element positioning
  */
-function buildElementStyle(bbox, font) {
+function buildElementStyle(bbox, font, shouldBeVisible = false) {
     const styles = [];
 
     // Position (PDF coordinates: origin at bottom-left, HTML: top-left)
@@ -344,10 +489,21 @@ function buildElementStyle(bbox, font) {
         if (font.style === 'italic') {
             styles.push(`font-style: italic`);
         }
-        if (font.color) {
-            styles.push(`color: ${font.color}`);
+        // Color: transparent for background layer, visible for placeholders
+        if (shouldBeVisible) {
+            if (font.color && font.color !== 'transparent') {
+                styles.push(`color: ${font.color}`);
+            } else {
+                styles.push('color: #000000'); // Default visible color
+            }
+        } else {
+            styles.push('color: transparent'); // Transparent for selection only
         }
     }
+
+    // Make text selectable
+    styles.push('cursor: text');
+    styles.push('user-select: text');
 
     return styles.join('; ');
 }
