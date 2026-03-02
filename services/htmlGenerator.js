@@ -30,6 +30,18 @@ const CV_FIELD_TYPES = [
 ];
 
 /**
+ * Mapping field names -> textual placeholders.
+ * Kept for backward compatibility with older flows, even though the
+ * current generator старается не использовать {{...}} в новом HTML.
+ */
+const PLACEHOLDER_VALUES = CV_FIELD_TYPES
+    .filter((name) => name !== 'unknown')
+    .reduce((acc, field) => {
+        acc[field] = `{{${field}}}`;
+        return acc;
+    }, {});
+
+/**
  * Generate complete HTML document from parsed structure and semantics
  * @param {Object} parsedStructure - From pdfStructureParser
  * @param {Object} semanticAnalysis - From semanticAnalyzer
@@ -183,11 +195,76 @@ function generateHtmlDocument(parsedStructure, semanticAnalysis, options = {}) {
                 document.querySelectorAll('[contenteditable="true"]').forEach(function(el) {
                     el.contentEditable = 'false';
                 });
+            },
+            
+            // ============ SECTION COLOR API ============
+            
+            /**
+             * Get all color sections in the document
+             * @returns {Array} Array of section objects with id, name, backgroundColor
+             */
+            getSections: function() {
+                var sections = [];
+                document.querySelectorAll('.cv-section').forEach(function(el) {
+                    sections.push({
+                        id: el.dataset.sectionId,
+                        name: el.dataset.sectionName,
+                        backgroundColor: el.style.backgroundColor
+                    });
+                });
+                return sections;
+            },
+            
+            /**
+             * Update section background color
+             * @param {string} sectionId - Section ID
+             * @param {string} color - HEX or CSS color value
+             */
+            updateSectionColor: function(sectionId, color) {
+                var section = document.querySelector('[data-section-id="' + sectionId + '"]');
+                if (section) {
+                    section.style.backgroundColor = color;
+                }
+            },
+            
+            /**
+             * Update text color for all elements in a section
+             * @param {string} sectionId - Section ID  
+             * @param {string} color - HEX or CSS color value
+             */
+            updateSectionTextColor: function(sectionId, color) {
+                document.querySelectorAll('[data-section="' + sectionId + '"]').forEach(function(el) {
+                    el.style.color = color;
+                });
+            },
+            
+            /**
+             * Get color palette used in document
+             * @returns {Object} Object with background and text colors arrays
+             */
+            getColorPalette: function() {
+                var bgColors = new Set();
+                var textColors = new Set();
+                
+                document.querySelectorAll('.cv-section').forEach(function(el) {
+                    if (el.style.backgroundColor) bgColors.add(el.style.backgroundColor);
+                });
+                
+                document.querySelectorAll('.cv-block, .cv-line').forEach(function(el) {
+                    if (el.style.color) textColors.add(el.style.color);
+                });
+                
+                return {
+                    backgrounds: Array.from(bgColors),
+                    text: Array.from(textColors)
+                };
             }
         };
         
         // Legacy alias for backward compatibility
         window.CVPlaceholders = window.CVFields;
+        
+        console.log('✅ CV Editor ready. Use CVFields.getSections() to see color sections.');
     </script>
 </body>
 </html>`;
@@ -242,6 +319,14 @@ body {
     position: absolute;
     z-index: 0;
     pointer-events: none;
+}
+
+/* AI-detected color sections */
+.cv-section {
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+    transition: background-color 0.3s ease;
 }
 
 .cv-block {
@@ -349,11 +434,38 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
     const lines = page.lines || [];
     const blocks = page.blocks || [];
     const backgrounds = page.backgrounds || [];
+    const colorSections = page.colorSections || []; // AI-detected color sections
 
-    // Generate background elements first (they go behind text)
-    let backgroundsHtml = backgrounds.map((bg, idx) => {
-        return `        <div class="cv-background" data-bg-id="${bg.id}" style="position: absolute; left: ${bg.bbox.x}px; top: ${bg.bbox.y}px; width: ${bg.bbox.width}px; height: ${bg.bbox.height}px; background-color: ${bg.color}; z-index: 0;"></div>`;
-    }).join('\n');
+    // Priority 1: Generate AI-detected color sections (pure CSS, no PNG)
+    let sectionsHtml = '';
+    if (colorSections.length > 0) {
+        sectionsHtml = colorSections.map((section, idx) => {
+            if (!section.bbox) return '';
+
+            const sectionStyles = [
+                'position: absolute',
+                `left: ${section.bbox.x}px`,
+                `top: ${section.bbox.y}px`,
+                `width: ${section.bbox.width}px`,
+                `height: ${section.bbox.height}px`,
+                `background-color: ${section.backgroundColor || '#FFFFFF'}`,
+                'z-index: 0',
+                'pointer-events: none'
+            ].join('; ');
+
+            return `        <div class="cv-section" data-section-id="${section.id}" data-section-name="${section.name || 'unnamed'}" style="${sectionStyles}"></div>`;
+        }).filter(html => html).join('\n');
+    }
+
+    // Priority 2: Fallback to extracted backgrounds if no AI sections
+    let backgroundsHtml = '';
+    if (sectionsHtml === '' && backgrounds.length > 0) {
+        backgroundsHtml = backgrounds.map((bg, idx) => {
+            return `        <div class="cv-background" data-bg-id="${bg.id}" style="position: absolute; left: ${bg.bbox.x}px; top: ${bg.bbox.y}px; width: ${bg.bbox.width}px; height: ${bg.bbox.height}px; background-color: ${bg.color}; z-index: 0;"></div>`;
+        }).join('\n');
+    }
+
+    const allBackgroundElements = sectionsHtml || backgroundsHtml;
 
     // Prefer lines if available, fallback to blocks
     const elements = lines.length > 0 ? lines : blocks;
@@ -361,8 +473,8 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
     let elementsHtml = elements.map((element, idx) => {
         const blockId = element.id || `p${pageIndex}_b${idx}`;
         const fieldInfo = fieldMappings[blockId];
-        const fieldType = fieldInfo?.fieldType || element.semanticHint || 'unknown';
-        const confidence = fieldInfo?.confidence || 0;
+        const fieldType = fieldInfo?.fieldType || element.fieldType || element.semanticHint || 'unknown';
+        const confidence = fieldInfo?.confidence || element.confidence || 0;
 
         return generateElementHtml(element, {
             blockId,
@@ -375,25 +487,17 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
         });
     }).join('\n');
 
-    // Build page style - use backgrounds as base, background image only as fallback
-    let pageStyle = `position: relative; width: ${page.width}px; height: ${page.height}px; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);`;
+    // Build page style - white background by default (sections provide colors)
+    let pageStyle = `position: relative; width: ${page.width}px; height: ${page.height}px; margin: 20px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: white; overflow: hidden;`;
 
-    // Only use background image if no extracted backgrounds OR as fallback layer
-    if (page.backgroundImage) {
-        if (backgrounds.length === 0) {
-            // No extracted backgrounds - use image as main background
-            pageStyle += ` background-image: url('${page.backgroundImage}'); background-size: ${page.width}px ${page.height}px; background-repeat: no-repeat;`;
-        } else {
-            // Have extracted backgrounds - use image at lower opacity as fallback
-            pageStyle += ` background-color: white;`;
-        }
-    } else {
-        pageStyle += ` background: white;`;
+    // Only use background image as last resort if no sections and no extracted backgrounds
+    if (colorSections.length === 0 && backgrounds.length === 0 && page.backgroundImage) {
+        pageStyle += ` background-image: url('${page.backgroundImage}'); background-size: ${page.width}px ${page.height}px; background-repeat: no-repeat;`;
     }
 
     return `
     <div class="cv-page" data-page="${pageIndex}" style="${pageStyle}">
-        ${backgroundsHtml}
+        ${allBackgroundElements}
         ${elementsHtml}
     </div>`;
 }
@@ -431,8 +535,10 @@ function generateElementHtml(element, options) {
         hasUserData = true;
     }
 
-    // Build style - text is ALWAYS visible (not transparent)
-    const style = buildElementStyle(bbox, font, true);
+    // Build style - use AI-determined textColor if available, otherwise font color
+    // NOTE: backgroundColor is now handled by section divs, not individual blocks
+    const textColor = element.textColor || font.color || null;
+    const style = buildElementStyle(bbox, font, true, null, null, textColor);
 
     // Build data attributes for binding
     let dataAttrs = '';
@@ -442,6 +548,9 @@ function generateElementHtml(element, options) {
         dataAttrs += ` data-confidence="${confidence.toFixed(2)}"`;
         dataAttrs += ` data-original="${escapeHtml(originalText)}"`;
         dataAttrs += ` data-editable="true"`;
+        if (element.sectionId) {
+            dataAttrs += ` data-section="${element.sectionId}"`;
+        }
         // Mark if field is empty (no user data and we want placeholders)
         if (usePlaceholders && !hasUserData && fieldType !== 'unknown') {
             dataAttrs += ` data-needs-data="true"`;
@@ -457,7 +566,7 @@ function generateElementHtml(element, options) {
 /**
  * Build inline style for element positioning
  */
-function buildElementStyle(bbox, font, shouldBeVisible = false) {
+function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor = null, backgroundImage = null, textColor = null) {
     const styles = [];
 
     // Position (PDF coordinates: origin at bottom-left, HTML: top-left)
@@ -472,7 +581,20 @@ function buildElementStyle(bbox, font, shouldBeVisible = false) {
         if (bbox.width && bbox.width > 0) {
             styles.push(`width: ${bbox.width.toFixed(1)}px`);
         }
-        // Height is implied by font-size, but can be explicit
+        if (bbox.height && bbox.height > 0) {
+            styles.push(`height: ${bbox.height.toFixed(1)}px`);
+        }
+    }
+
+    // Block background (only if explicitly provided - sections handle most backgrounds now)
+    if (backgroundImage) {
+        // Use background image (complex/gradient backgrounds)
+        styles.push(`background-image: url(${backgroundImage})`);
+        styles.push('background-size: 100% 100%');
+        styles.push('background-repeat: no-repeat');
+    } else if (backgroundColor && backgroundColor !== '#ffffff' && backgroundColor !== '#FFFFFF') {
+        // Use solid background color
+        styles.push(`background-color: ${backgroundColor}`);
     }
 
     // Font styling
@@ -489,16 +611,19 @@ function buildElementStyle(bbox, font, shouldBeVisible = false) {
         if (font.style === 'italic') {
             styles.push(`font-style: italic`);
         }
-        // Color: transparent for background layer, visible for placeholders
-        if (shouldBeVisible) {
-            if (font.color && font.color !== 'transparent') {
-                styles.push(`color: ${font.color}`);
-            } else {
-                styles.push('color: #000000'); // Default visible color
-            }
+    }
+
+    // Text color: priority is textColor (AI) > font.color > default
+    if (shouldBeVisible) {
+        if (textColor && textColor !== 'transparent') {
+            styles.push(`color: ${textColor}`);
+        } else if (font?.color && font.color !== 'transparent') {
+            styles.push(`color: ${font.color}`);
         } else {
-            styles.push('color: transparent'); // Transparent for selection only
+            styles.push('color: #000000'); // Default visible color
         }
+    } else {
+        styles.push('color: transparent'); // Transparent for selection only
     }
 
     // Make text selectable

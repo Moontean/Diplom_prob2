@@ -29,7 +29,8 @@ async function ensureGemini() {
       GoogleGenerativeAI = mod.GoogleGenerativeAI;
     }
     const genAI = new GoogleGenerativeAI(geminiKey);
-    geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    console.log('✅ Gemini model initialized: gemini-3-flash-preview');
     return true;
   } catch (err) {
     console.warn('⚠️ Не удалось инициализировать Gemini:', err.message);
@@ -270,41 +271,79 @@ module.exports = {
     const mime = match ? match[1] : 'image/png';
     const data = match ? match[2] : imageBase64;
 
-    const promptText = `Ты — фронтенд разработчик. На основе изображения (скриншота PDF страницы) создай ОДИН цельный HTML-файл с ВСТРОЕННЫМИ CSS-стилями (без внешних зависимостей), максимально точно повторяющий визуальный дизайн (пиксельно-точно).
-Требования:
-  - Верни ТОЛЬКО чистый HTML (без пояснений, без Markdown и без бэктиков), начинай с <!DOCTYPE html>.
-  - Приоритет — точное совпадение дизайна: допускай абсолютное позиционирование, точные отступы/размеры/цвета.
-  - Не используй внешние ресурсы (<link>, CDNs). Весь CSS — внутри <style>.
-  - НЕ вставляй изображение скриншота как <img> для основного контента: цель — текстовая верстка.
-- Заголовок документа: ${title}.
-- Страница должна занимать всю ширину контейнера, быть масштабируемой.
-`;
+    const promptText = `Ты — опытный фронтенд разработчик. Твоя задача — на основе изображения (скриншота PDF резюме) создать ОДИН цельный HTML-файл с ВСТРОЕННЫМИ CSS-стилями, МАКСИМАЛЬНО ТОЧНО повторяющий визуальный дизайн.
+
+## КРИТИЧЕСКИ ВАЖНО — ЦВЕТА И ФОНЫ:
+1. Внимательно определи ВСЕ цветные области на изображении (сайдбары, заголовки, блоки)
+2. Используй ТОЧНЫЕ HEX-коды цветов (например #2F80ED, #1E3A5F, #333333)
+3. Для каждой цветной области создай отдельный <div> с background-color
+4. Цветные секции должны быть с position: absolute или в CSS Grid/Flexbox
+
+## Структура HTML:
+- Начинай с <!DOCTYPE html>
+- Весь CSS внутри <style> (без внешних ресурсов)
+- Используй абсолютное позиционирование для точного расположения элементов
+- Размеры в px для точности
+
+## Пример структуры для резюме с цветным сайдбаром:
+\`\`\`html
+<div class="resume-page" style="position: relative; width: 595px; height: 842px;">
+  <div class="sidebar" style="position: absolute; left: 0; top: 0; width: 200px; height: 100%; background-color: #2F80ED;"></div>
+  <div class="main-content" style="position: absolute; left: 200px; top: 0; right: 0; height: 100%; background: #fff;"></div>
+</div>
+\`\`\`
+
+## Требования:
+- Верни ТОЛЬКО чистый HTML (без пояснений, без Markdown-разметки)
+- НЕ вставляй исходное изображение как <img>
+- Текст должен быть реальным текстом (не картинкой)
+- Заголовок: ${title}
+- Страница A4 (595x842px) или пропорционально масштабируемая
+
+Начинай ответ с <!DOCTYPE html>`;
     const buildImageFallbackHtml = () => {
       const dataUrl = `data:${mime};base64,${data}`;
       return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>html,body{margin:0;padding:0;background:#f8fafc} .page-wrap{display:flex;align-items:center;justify-content:center;padding:16px} .page{max-width:100%;height:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);background:#fff}</style></head><body><div class="page-wrap"><img class="page" src="${dataUrl}" alt="${title}"></div></body></html>`;
     };
+
+    console.log(`🤖 generateHtmlFromImage: Gemini available = ${useGemini}, has model = ${!!geminiModel}`);
+
     if (useGemini && geminiModel) {
-      // Первая попытка (основной промпт)
-      let res = await geminiModel.generateContent([
-        { inlineData: { mimeType: mime, data } },
-        { text: promptText }
-      ]);
-      let text = res?.response?.text?.() || res?.text?.() || '';
-      let html = extractHTML(text);
-      // Ретрай с более строгими требованиями
-      if (!html) {
-        const retryPrompt = `${promptText}\nВерни строго чистый HTML, начинай с <!DOCTYPE html>, без Markdown и бэктиков.`;
-        res = await geminiModel.generateContent([
+      console.log('✨ Using Gemini API for HTML generation...');
+      try {
+        // Первая попытка (основной промпт)
+        let res = await geminiModel.generateContent([
           { inlineData: { mimeType: mime, data } },
-          { text: retryPrompt }
+          { text: promptText }
         ]);
-        text = res?.response?.text?.() || res?.text?.() || '';
-        html = extractHTML(text);
+        let text = res?.response?.text?.() || res?.text?.() || '';
+        console.log(`📝 Gemini response length: ${text.length} chars`);
+        let html = extractHTML(text);
+        // Ретрай с более строгими требованиями
+        if (!html) {
+          console.log('⚠️ First attempt failed, retrying with stricter prompt...');
+          const retryPrompt = `${promptText}\nВерни строго чистый HTML, начинай с <!DOCTYPE html>, без Markdown и бэктиков.`;
+          res = await geminiModel.generateContent([
+            { inlineData: { mimeType: mime, data } },
+            { text: retryPrompt }
+          ]);
+          text = res?.response?.text?.() || res?.text?.() || '';
+          html = extractHTML(text);
+        }
+        if (html) {
+          console.log('✅ Gemini successfully generated HTML with colors');
+          return html;
+        }
+        console.log('❌ Gemini failed to generate valid HTML');
+        if (strict) throw new Error('AI не вернул валидный HTML');
+      } catch (geminiErr) {
+        console.error('❌ Gemini error:', geminiErr.message);
+        if (strict) throw geminiErr;
       }
-      if (html) return html;
-      if (strict) throw new Error('AI не вернул валидный HTML');
       // иначе продолжаем попытку через OpenAI-совместимый хост
     }
+
+    console.log('🔄 Falling back to OpenAI-compatible endpoint...');
     // Fallback: OpenAI-совместимый хост (например LM Studio) с поддержкой мультимодальных сообщений.
     // Нормализуем базовый URL: гарантируем наличие /v1
     let base = OAI_BASE_URL.replace(/\/$/, '');

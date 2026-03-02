@@ -9,6 +9,10 @@ const { createCanvas, Image } = require('canvas');
 // Lazy-load pdfjs-dist to avoid startup issues
 let pdfjsLib = null;
 
+// Логируем ошибку рендера страниц PDF→canvas только один раз,
+// чтобы не засорять консоль одинаковыми сообщениями для каждой страницы.
+let hasLoggedImageRenderError = false;
+
 /**
  * NodeCanvasFactory for PDF.js to work with node-canvas
  */
@@ -48,7 +52,15 @@ class NodeCanvasFactoryWithImages extends NodeCanvasFactory {
 async function ensurePdfJs() {
     if (pdfjsLib) return;
     try {
-        // Make Image available globally for PDF.js
+        // Make Canvas & Image available globally for PDF.js (Node environment)
+        // Это важно для корректной работы inline-изображений: pdfjs-dist внутри
+        // проверяет, что объект является экземпляром global.Image или global.Canvas.
+        if (typeof global.Canvas === 'undefined') {
+            // createCanvas(...) возвращает инстанс node-canvas Canvas,
+            // берём его конструктор как класс Canvas.
+            global.Canvas = createCanvas(1, 1).constructor;
+            console.log('✅ Global Canvas class set from node-canvas');
+        }
         if (typeof global.Image === 'undefined') {
             global.Image = Image;
             console.log('✅ Global Image class set from node-canvas');
@@ -79,6 +91,171 @@ async function ensurePdfJs() {
 }
 
 /**
+ * Render PDF page to canvas and return canvas object (for block extraction)
+ * @param {Object} page - PDF.js page object
+ * @param {number} scale - Render scale
+ * @returns {Promise<{canvas, context, width, height, scale}|null>}
+ */
+async function renderPageToCanvas(page, scale = 2.0) {
+    try {
+        const viewport = page.getViewport({ scale });
+        const canvasFactory = new NodeCanvasFactoryWithImages();
+        const canvasAndContext = canvasFactory.create(viewport.width, viewport.height);
+        const { canvas, context } = canvasAndContext;
+
+        // White background
+        context.fillStyle = 'white';
+        context.fillRect(0, 0, viewport.width, viewport.height);
+
+        await page.render({
+            canvasContext: context,
+            viewport: viewport,
+            canvasFactory: canvasFactory,
+            background: 'white',
+            enableImageBitmaps: false
+        }).promise;
+
+        return {
+            canvas,
+            context,
+            width: viewport.width,
+            height: viewport.height,
+            scale
+        };
+    } catch (err) {
+        if (!hasLoggedImageRenderError) {
+            console.error('❌ Error rendering page to canvas:', err.message);
+            hasLoggedImageRenderError = true;
+        }
+        return null;
+    }
+}
+
+/**
+ * Get average color of a canvas region
+ * @param {Object} canvas - node-canvas object
+ * @param {number} x - start x
+ * @param {number} y - start y  
+ * @param {number} w - width
+ * @param {number} h - height
+ * @returns {{color: string, isSimple: boolean}} - hex color and whether it's uniform
+ */
+function getRegionColor(canvas, x, y, w, h) {
+    try {
+        const ctx = canvas.getContext('2d');
+        const safeX = Math.max(0, Math.min(x, canvas.width - 1));
+        const safeY = Math.max(0, Math.min(y, canvas.height - 1));
+        const safeW = Math.min(w, canvas.width - safeX);
+        const safeH = Math.min(h, canvas.height - safeY);
+
+        if (safeW < 1 || safeH < 1) return { color: '#ffffff', isSimple: true };
+
+        const imageData = ctx.getImageData(safeX, safeY, safeW, safeH);
+        const data = imageData.data;
+
+        let r = 0, g = 0, b = 0;
+        let count = 0;
+
+        // Sample every 4th pixel for speed
+        for (let i = 0; i < data.length; i += 16) {
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+            count++;
+        }
+
+        if (count === 0) return { color: '#ffffff', isSimple: true };
+
+        r = Math.round(r / count);
+        g = Math.round(g / count);
+        b = Math.round(b / count);
+
+        // Check color variance
+        let variance = 0;
+        for (let i = 0; i < data.length; i += 16) {
+            variance += Math.abs(data[i] - r) + Math.abs(data[i + 1] - g) + Math.abs(data[i + 2] - b);
+        }
+        variance /= count;
+
+        const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+        return {
+            color: hex,
+            isSimple: variance < 30 // Low variance = solid color
+        };
+    } catch (err) {
+        return { color: '#ffffff', isSimple: true };
+    }
+}
+
+/**
+ * Extract background fragment for a block
+ * @param {Object} pageCanvas - rendered page canvas result
+ * @param {Object} bbox - block bounding box {x, y, width, height}
+ * @param {number} padding - extra padding around block
+ * @returns {{color: string|null, imageData: string|null}}
+ */
+function extractBlockBackground(pageCanvas, bbox, padding = 2) {
+    if (!pageCanvas || !pageCanvas.canvas) return { color: null, imageData: null };
+
+    try {
+        const scale = pageCanvas.scale;
+        const expandedBbox = {
+            x: Math.max(0, (bbox.x - padding) * scale),
+            y: Math.max(0, (bbox.y - padding) * scale),
+            width: (bbox.width + padding * 2) * scale,
+            height: (bbox.height + padding * 2) * scale
+        };
+
+        // Get color info
+        const colorInfo = getRegionColor(
+            pageCanvas.canvas,
+            expandedBbox.x,
+            expandedBbox.y,
+            expandedBbox.width,
+            expandedBbox.height
+        );
+
+        // If simple solid color (not white), return just the color
+        if (colorInfo.isSimple) {
+            // Skip white/near-white backgrounds
+            const isWhite = colorInfo.color.toLowerCase() === '#ffffff' ||
+                colorInfo.color.toLowerCase() === '#fefefe' ||
+                colorInfo.color.toLowerCase() === '#fdfdfd';
+            return {
+                color: isWhite ? null : colorInfo.color,
+                imageData: null
+            };
+        }
+
+        // Complex background - extract as image
+        const blockCanvas = createCanvas(
+            Math.ceil(expandedBbox.width),
+            Math.ceil(expandedBbox.height)
+        );
+        const ctx = blockCanvas.getContext('2d');
+
+        ctx.drawImage(
+            pageCanvas.canvas,
+            expandedBbox.x,
+            expandedBbox.y,
+            expandedBbox.width,
+            expandedBbox.height,
+            0, 0,
+            expandedBbox.width,
+            expandedBbox.height
+        );
+
+        return {
+            color: null,
+            imageData: blockCanvas.toDataURL('image/png')
+        };
+    } catch (err) {
+        return { color: null, imageData: null };
+    }
+}
+
+/**
  * Render PDF page to canvas and return as base64 image
  * @param {Object} page - PDF.js page object
  * @param {number} scale - Render scale (default 2.0 for display, 0.5 for AI)
@@ -86,9 +263,9 @@ async function ensurePdfJs() {
  * @returns {Promise<string>} Base64 encoded image
  */
 async function renderPageToImage(page, scale = 2.0, options = {}) {
-    const { forAI = false, quality = 0.7 } = options;
-    // Use lower scale for AI to reduce token count
-    const effectiveScale = forAI ? Math.min(scale, 0.5) : scale;
+    const { forAI = false, quality = 0.8 } = options;
+    // Use scale 1.0 for AI to get better color detection
+    const effectiveScale = forAI ? Math.min(scale, 1.0) : scale;
 
     try {
         console.log(`\n🎨 Starting renderPageToImage with scale: ${effectiveScale} (forAI: ${forAI})`);
@@ -106,14 +283,15 @@ async function renderPageToImage(page, scale = 2.0, options = {}) {
         console.log(`✅ White background set`);
 
         console.log(`🖼️ Starting page.render()...`);
-        await page.render({
+        const renderTask = page.render({
             canvasContext: context,
             viewport: viewport,
             canvasFactory: canvasFactory,
             background: 'white',
             // Disable ImageBitmap API (not available in Node.js)
             enableImageBitmaps: false
-        }).promise;
+        });
+        await renderTask.promise;
         console.log(`✅ page.render() completed`);
 
         // Convert canvas to base64
@@ -137,9 +315,16 @@ async function renderPageToImage(page, scale = 2.0, options = {}) {
 
         return base64;
     } catch (err) {
-        console.error('❌ Error rendering page to image:', err.message);
-        console.error('❌ Stack:', err.stack);
-        throw err;
+        // Некорректные inline-изображения в некоторых PDF (особенно старых шаблонов)
+        // могут вызывать ошибку "Image or Canvas expected" внутри pdfjs-dist.
+        // Для нас это не критично: в таком случае просто возвращаем null,
+        // чтобы остальной конвейер (текст, фоны) продолжал работать.
+        if (!hasLoggedImageRenderError) {
+            console.error('❌ Error rendering page to image (non-fatal):', err.message);
+            console.error('   Подробнее: эта ошибка типична для некоторых inline-изображений в PDF при использовании node-canvas. Фоновые PNG просто не будут сгенерированы, но текстовая структура останется доступной.');
+            hasLoggedImageRenderError = true;
+        }
+        return null;
     }
 }
 
@@ -191,24 +376,31 @@ async function extractTextColors(page) {
 }
 
 /**
- * PDF.js OPS constants for reference
+ * Get PDF.js OPS constants dynamically
+ * Используем реальные значения из pdfjsLib для совместимости между версиями
  */
-const OPS = {
-    setFillRGBColor: 19,
-    setStrokeRGBColor: 20,
-    setFillGray: 21,
-    setStrokeGray: 22,
-    setFillCMYKColor: 23,
-    setStrokeCMYKColor: 24,
-    fill: 18,
-    eoFill: 81,
-    fillStroke: 82,
-    constructPath: 91,
-    rectangle: 92,
-    transform: 12,
-    save: 10,
-    restore: 11
-};
+function getOPS() {
+    if (pdfjsLib && pdfjsLib.OPS) {
+        return pdfjsLib.OPS;
+    }
+    // Fallback для случаев когда pdfjsLib ещё не загружен
+    return {
+        setFillRGBColor: 19,
+        setStrokeRGBColor: 20,
+        setFillGray: 21,
+        setStrokeGray: 22,
+        setFillCMYKColor: 23,
+        setStrokeCMYKColor: 24,
+        fill: 18,
+        eoFill: 81,
+        fillStroke: 82,
+        constructPath: 91,
+        rectangle: 92,
+        transform: 12,
+        save: 10,
+        restore: 11
+    };
+}
 
 /**
  * Extract background shapes (rectangles, paths) with colors from PDF
@@ -218,16 +410,34 @@ const OPS = {
  */
 async function extractBackgrounds(page, viewport) {
     const backgrounds = [];
+    const OPS = getOPS();
 
     try {
         const operatorList = await page.getOperatorList();
         const { fnArray, argsArray } = operatorList;
+
+        console.log(`🔍 Analyzing ${fnArray.length} PDF operators for backgrounds...`);
+
+        // Debug: count operator types
+        const opCounts = {};
+        for (const fn of fnArray) {
+            opCounts[fn] = (opCounts[fn] || 0) + 1;
+        }
+        // Log interesting operators
+        const interestingOps = [OPS.setFillRGBColor, OPS.setFillGray, OPS.setFillCMYKColor, OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.rectangle, OPS.constructPath];
+        const foundOps = Object.entries(opCounts)
+            .filter(([op]) => interestingOps.includes(Number(op)))
+            .map(([op, count]) => `${op}:${count}`);
+        console.log(`🎨 Interesting operators: ${foundOps.join(', ') || 'none'}`);
 
         // State tracking
         let currentFillColor = '#ffffff';
         let currentPath = [];
         let transformMatrix = [1, 0, 0, 1, 0, 0]; // Identity matrix
         const transformStack = [];
+
+        // Debug: track found colors
+        const foundColors = new Set();
 
         for (let i = 0; i < fnArray.length; i++) {
             const fn = fnArray[i];
@@ -248,6 +458,7 @@ async function extractBackgrounds(page, viewport) {
                 case OPS.setFillRGBColor:
                     if (args.length >= 3) {
                         currentFillColor = rgbToHex(args[0], args[1], args[2]);
+                        foundColors.add(currentFillColor);
                     }
                     break;
                 case OPS.setFillGray:
@@ -255,6 +466,7 @@ async function extractBackgrounds(page, viewport) {
                         const gray = Math.round(args[0] * 255);
                         const hex = gray.toString(16).padStart(2, '0');
                         currentFillColor = `#${hex}${hex}${hex}`;
+                        foundColors.add(currentFillColor);
                     }
                     break;
                 case OPS.setFillCMYKColor:
@@ -265,6 +477,7 @@ async function extractBackgrounds(page, viewport) {
                         const g = 1 - Math.min(1, m * (1 - k) + k);
                         const b = 1 - Math.min(1, y * (1 - k) + k);
                         currentFillColor = rgbToHex(r, g, b);
+                        foundColors.add(currentFillColor);
                     }
                     break;
 
@@ -281,7 +494,9 @@ async function extractBackgrounds(page, viewport) {
 
                 // Construct path (moveTo, lineTo, etc.)
                 case OPS.constructPath:
-                    if (args && args[0] && args[1]) {
+                    // args: [opsArray, argsArray]; иногда в PDF попадаются странные записи,
+                    // поэтому обязательно проверяем, что это массивы.
+                    if (args && Array.isArray(args[0]) && Array.isArray(args[1])) {
                         const ops = args[0]; // Array of path operations
                         const pathArgs = args[1]; // Array of arguments
                         let argIndex = 0;
@@ -352,6 +567,10 @@ async function extractBackgrounds(page, viewport) {
         }
 
         console.log(`🎨 Extracted ${backgrounds.length} background elements`);
+        console.log(`🎨 Found colors: ${[...foundColors].join(', ') || 'none'}`);
+        if (backgrounds.length > 0) {
+            console.log(`🎨 First 3 backgrounds:`, backgrounds.slice(0, 3));
+        }
         return backgrounds;
 
     } catch (err) {
@@ -422,25 +641,40 @@ async function parsePdfStructure(pdfInput) {
         console.log(`\n📄 ========== Processing page ${pageNum} ==========`);
         let backgroundImage = null;
         let aiImage = null; // Compressed version for AI analysis
+        let pageCanvas = null; // Canvas for block background extraction
+
         try {
-            console.log(`🚀 Calling renderPageToImage for page ${pageNum}...`);
-            backgroundImage = await renderPageToImage(page, 2.0);
+            console.log(`🚀 Rendering page ${pageNum} to canvas...`);
+            // First render to canvas (for block background extraction)
+            pageCanvas = await renderPageToCanvas(page, 2.0);
+
+            if (pageCanvas) {
+                console.log(`✅ Page ${pageNum}: Canvas rendered (${pageCanvas.width}x${pageCanvas.height})`);
+                // Convert canvas to base64 for full background
+                backgroundImage = pageCanvas.canvas.toDataURL('image/png');
+                console.log(`   📊 Background image: ${backgroundImage.length} chars`);
+            }
 
             // Also render a smaller version for AI (to fit in context window)
-            aiImage = await renderPageToImage(page, 2.0, { forAI: true, quality: 0.6 });
+            aiImage = await renderPageToImage(page, 2.0, { forAI: true, quality: 0.8 });
 
-            if (backgroundImage) {
-                console.log(`✅ Page ${pageNum}: Background image rendered successfully`);
-                console.log(`   📊 Image length: ${backgroundImage.length} chars`);
-            }
             if (aiImage) {
-                console.log(`✅ Page ${pageNum}: AI image rendered successfully`);
+                console.log(`✅ Page ${pageNum}: AI image rendered`);
                 console.log(`   📊 AI Image length: ${aiImage.length} chars`);
             }
         } catch (err) {
-            console.error(`❌ Failed to render page ${pageNum} as image:`, err.message);
-            console.error(`❌ Error stack:`, err.stack);
-            // Continue without background image
+            console.error(`❌ Failed to render page ${pageNum}:`, err.message);
+            // Try renderPageToImage as fallback for AI
+            try {
+                console.log(`🔄 Attempting fallback render for page ${pageNum}...`);
+                aiImage = await renderPageToImage(page, 2.0, { forAI: true, quality: 0.8 });
+                if (aiImage) {
+                    console.log(`✅ Page ${pageNum}: Fallback AI image rendered (${aiImage.length} chars)`);
+                    backgroundImage = aiImage; // Use same image as background
+                }
+            } catch (fallbackErr) {
+                console.error(`❌ Fallback also failed for page ${pageNum}:`, fallbackErr.message);
+            }
         }
 
         const pageData = {
@@ -495,16 +729,21 @@ async function parsePdfStructure(pdfInput) {
                 fontFamily = 'Consolas, Monaco, monospace';
             }
 
+            // Extract background for this block from rendered canvas
+            const bbox = {
+                x: Math.round(x * 100) / 100,
+                y: Math.round(y * 100) / 100,
+                width: Math.round(width * 100) / 100,
+                height: Math.round(height * 100) / 100
+            };
+
+            const blockBg = extractBlockBackground(pageCanvas, bbox, 3);
+
             pageData.blocks.push({
                 id: `block_${pageNum}_${blockId++}`,
                 type: 'text',
                 text: item.str,
-                bbox: {
-                    x: Math.round(x * 100) / 100,
-                    y: Math.round(y * 100) / 100,
-                    width: Math.round(width * 100) / 100,
-                    height: Math.round(height * 100) / 100
-                },
+                bbox: bbox,
                 font: {
                     family: fontFamily,
                     size: Math.round(fontSize * 100) / 100,
@@ -513,7 +752,9 @@ async function parsePdfStructure(pdfInput) {
                     original: fontName
                 },
                 transform: transform,
-                color: 'transparent' // Text will be transparent, visible through background image
+                color: 'transparent', // Text will be transparent, visible through background image
+                background: blockBg.color, // Solid background color (if detected)
+                backgroundImage: blockBg.imageData // Complex background as data URL
             });
         }
 

@@ -426,6 +426,17 @@ app.post('/api/templates/pdf-to-html', pdfUpload.single('pdf'), async (req, res)
       imageBase64
     });
     console.log('Semantic analysis completed');
+    console.log('📊 Semantics result:', {
+      sections: semantics?.sections?.length || 0,
+      mappings: semantics?.fieldMappings ? Object.keys(semantics.fieldMappings).length : 0
+    });
+    if (semantics?.sections?.length > 0) {
+      console.log('🎨 Sections found:', semantics.sections.map(s => ({
+        id: s.id,
+        name: s.name,
+        bg: s.backgroundColor
+      })));
+    }
 
     // Step 3: Generate HTML
     console.log('Generating HTML...');

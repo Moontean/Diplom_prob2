@@ -67,12 +67,20 @@ const SemanticMappingSchema = z.object({
         blockId: z.string(),
         fieldType: z.enum(CV_FIELD_TYPES),
         confidence: z.number().min(0).max(1).optional(),
-        groupId: z.string().optional() // For grouping related items (e.g., experience entries)
+        groupId: z.string().optional(),
+        sectionId: z.string().optional() // Reference to section for coloring
     })),
     sections: z.array(z.object({
-        type: z.string(),
-        startBlockId: z.string(),
-        endBlockId: z.string().optional()
+        id: z.string(),
+        name: z.string(),
+        bbox: z.object({
+            x: z.number(),
+            y: z.number(),
+            width: z.number(),
+            height: z.number()
+        }).optional(),
+        backgroundColor: z.string(), // HEX color
+        textColor: z.string().optional() // HEX color for text
     })).optional()
 });
 
@@ -87,7 +95,8 @@ async function ensureGemini() {
             GoogleGenerativeAI = mod.GoogleGenerativeAI;
         }
         const genAI = new GoogleGenerativeAI(geminiKey);
-        geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+        console.log('✅ Gemini model initialized: gemini-3-flash-preview');
         return true;
     } catch (err) {
         console.warn('⚠️ Gemini initialization failed:', err.message);
@@ -171,17 +180,41 @@ function buildMultimodalPrompt(blocks) {
         fontSize: Math.round(b.font?.size || 12)
     }));
 
-    return `Analyze this resume image along with the extracted text blocks. Map each block to a CV field type.
+    return `Analyze this resume image along with the extracted text blocks. 
+
+TASK 1 - VISUAL SECTIONS & COLORS:
+Identify ALL distinct visual regions/sections with different background colors.
+Look for: headers, sidebars, main content areas, skill bars, progress indicators, colored boxes, banners.
+For EACH section provide the EXACT background color in HEX format and the text color used in that section.
+
+TASK 2 - FIELD MAPPINGS:
+Map each text block to its CV field type.
 
 TEXT BLOCKS (with positions):
 ${JSON.stringify(blockList, null, 2)}
 
 Field types: fullName, firstName, lastName, jobTitle, email, phone, address, city, postalCode, website, linkedin, github, birthdate, summary, experienceHeader, experienceTitle, experienceCompany, experienceDate, experienceDescription, educationHeader, educationDegree, educationInstitution, educationDate, skillsHeader, skill, languageHeader, language, sectionHeader, bodyText, unknown
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with this EXACT structure:
 {
+  "sections": [
+    { 
+      "id": "section_1", 
+      "name": "header", 
+      "bbox": {"x": 0, "y": 0, "width": 600, "height": 120},
+      "backgroundColor": "#2563EB",
+      "textColor": "#FFFFFF"
+    },
+    { 
+      "id": "section_2", 
+      "name": "sidebar", 
+      "bbox": {"x": 0, "y": 120, "width": 200, "height": 680},
+      "backgroundColor": "#1E293B",
+      "textColor": "#E2E8F0"
+    }
+  ],
   "mappings": [
-    { "blockId": "block_1_0", "fieldType": "fullName", "confidence": 0.95 }
+    { "blockId": "block_1_0", "fieldType": "fullName", "confidence": 0.95, "sectionId": "section_1" }
   ]
 }`;
 }
@@ -273,7 +306,126 @@ function analyzeWithHeuristics(structure) {
         }
     }
 
-    return { mappings, sections: [] };
+    // Detect sections from structure
+    const sections = detectSectionsFromStructure(structure);
+
+    return { mappings, sections };
+}
+
+/**
+ * Detect MAJOR sections from text structure
+ * Creates only key zones: header, contact bar, and main content sections
+ * All sections span full page width
+ */
+function detectSectionsFromStructure(structure) {
+    const allSections = [];
+
+    for (const page of structure.pages) {
+        const pageWidth = page.width || 612;
+        const pageHeight = page.height || 792;
+        const pageNum = page.pageNumber || 1;
+
+        // Collect all blocks with their Y positions
+        const allBlocks = [...(page.blocks || [])].sort((a, b) =>
+            (a.bbox?.y || 0) - (b.bbox?.y || 0)
+        );
+
+        if (allBlocks.length === 0) continue;
+
+        // Find key zone boundaries
+        let headerEndY = 0;
+        let contactBarStart = -1;
+        let contactBarEnd = -1;
+        let mainContentStart = 0;
+
+        // Detect header zone (name + title at top)
+        for (const block of allBlocks) {
+            const y = block.bbox?.y || 0;
+            const fontSize = block.font?.size || 12;
+            const text = (block.text || '').trim();
+
+            // Header zone: large text at top (name, title)
+            if (y < 120 && fontSize > 14) {
+                headerEndY = Math.max(headerEndY, y + (block.bbox?.height || 30) + 10);
+            }
+        }
+
+        // Detect contact bar (email, phone line near top)
+        for (const block of allBlocks) {
+            const y = block.bbox?.y || 0;
+            const text = (block.text || '').toLowerCase();
+
+            // Contact info usually contains email/phone
+            if (y < 200 && (/@|phone|tel:|555-|exemple\.com|example\.com/i.test(text) ||
+                /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(text))) {
+                if (contactBarStart < 0) contactBarStart = y - 5;
+                contactBarEnd = Math.max(contactBarEnd, y + (block.bbox?.height || 20) + 5);
+            }
+        }
+
+        // Main content starts after header and contact bar
+        mainContentStart = Math.max(headerEndY, contactBarEnd, 0);
+
+        // Create major zones
+        const pageSections = [];
+        let sectionIndex = 1;
+
+        // 1. Header zone (name + title area) - light blue
+        if (headerEndY > 0) {
+            pageSections.push({
+                id: `page${pageNum}_section_${sectionIndex++}`,
+                name: 'header',
+                bbox: {
+                    x: 0,
+                    y: 0,
+                    width: pageWidth,
+                    height: contactBarStart > 0 ? contactBarStart : headerEndY
+                },
+                backgroundColor: '#B8D4E8',
+                textColor: '#1A1A1A',
+                pageNumber: pageNum
+            });
+        }
+
+        // 2. Contact bar zone - dark gray
+        if (contactBarStart > 0 && contactBarEnd > contactBarStart) {
+            pageSections.push({
+                id: `page${pageNum}_section_${sectionIndex++}`,
+                name: 'contact',
+                bbox: {
+                    x: 0,
+                    y: contactBarStart,
+                    width: pageWidth,
+                    height: contactBarEnd - contactBarStart
+                },
+                backgroundColor: '#4A5568',
+                textColor: '#FFFFFF',
+                pageNumber: pageNum
+            });
+            mainContentStart = contactBarEnd;
+        }
+
+        // 3. Main content area - white (rest of page)
+        if (mainContentStart < pageHeight - 50) {
+            pageSections.push({
+                id: `page${pageNum}_section_${sectionIndex++}`,
+                name: 'content',
+                bbox: {
+                    x: 0,
+                    y: mainContentStart,
+                    width: pageWidth,
+                    height: pageHeight - mainContentStart
+                },
+                backgroundColor: '#FFFFFF',
+                textColor: '#333333',
+                pageNumber: pageNum
+            });
+        }
+
+        allSections.push(...pageSections);
+    }
+
+    return allSections;
 }
 
 /**
@@ -401,13 +553,45 @@ function mergeStructureWithSemantics(structure, semantics) {
         mappingById.set(m.blockId, m);
     }
 
+    // Create section lookup map
+    const sectionsById = new Map();
+    const sections = semantics.sections || [];
+    for (const s of sections) {
+        sectionsById.set(s.id, s);
+    }
+
     for (const page of structure.pages) {
+        // Store sections for this page only (filter by pageNumber)
+        page.colorSections = sections.filter(s =>
+            !s.pageNumber || s.pageNumber === page.pageNumber
+        );
+
         for (const block of page.blocks) {
             const mapping = mappingById.get(block.id);
             if (mapping) {
                 block.fieldType = mapping.fieldType;
                 block.confidence = mapping.confidence || 0.5;
                 block.groupId = mapping.groupId;
+
+                // Apply section colors to block
+                if (mapping.sectionId) {
+                    const section = sectionsById.get(mapping.sectionId);
+                    if (section) {
+                        block.sectionId = section.id;
+                        block.backgroundColor = section.backgroundColor;
+                        block.textColor = section.textColor;
+                    }
+                }
+            }
+
+            // Fallback: find section by position if not mapped
+            if (!block.backgroundColor && sections.length > 0) {
+                const matchingSection = findSectionForPosition(block.bbox, sections);
+                if (matchingSection) {
+                    block.sectionId = matchingSection.id;
+                    block.backgroundColor = matchingSection.backgroundColor;
+                    block.textColor = matchingSection.textColor;
+                }
             }
         }
 
@@ -417,12 +601,55 @@ function mergeStructureWithSemantics(structure, semantics) {
                 line.fieldType = mapping.fieldType;
                 line.confidence = mapping.confidence || 0.5;
                 line.groupId = mapping.groupId;
+
+                // Apply section colors to line
+                if (mapping.sectionId) {
+                    const section = sectionsById.get(mapping.sectionId);
+                    if (section) {
+                        line.sectionId = section.id;
+                        line.backgroundColor = section.backgroundColor;
+                        line.textColor = section.textColor;
+                    }
+                }
+            }
+
+            // Fallback: find section by position
+            if (!line.backgroundColor && sections.length > 0) {
+                const matchingSection = findSectionForPosition(line.bbox, sections);
+                if (matchingSection) {
+                    line.sectionId = matchingSection.id;
+                    line.backgroundColor = matchingSection.backgroundColor;
+                    line.textColor = matchingSection.textColor;
+                }
             }
         }
     }
 
-    structure.sections = semantics.sections || [];
+    structure.sections = sections;
     return structure;
+}
+
+/**
+ * Find which section contains a given position
+ */
+function findSectionForPosition(bbox, sections) {
+    if (!bbox || !sections || sections.length === 0) return null;
+
+    const centerX = bbox.x + (bbox.width || 0) / 2;
+    const centerY = bbox.y + (bbox.height || 0) / 2;
+
+    for (const section of sections) {
+        if (!section.bbox) continue;
+
+        const inX = centerX >= section.bbox.x && centerX <= section.bbox.x + section.bbox.width;
+        const inY = centerY >= section.bbox.y && centerY <= section.bbox.y + section.bbox.height;
+
+        if (inX && inY) {
+            return section;
+        }
+    }
+
+    return null;
 }
 
 /**
