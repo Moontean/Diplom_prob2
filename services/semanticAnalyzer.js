@@ -316,6 +316,7 @@ function analyzeWithHeuristics(structure) {
  * Detect MAJOR sections from text structure
  * Creates only key zones: header, contact bar, and main content sections
  * All sections span full page width
+ * Uses EXACT bounding boxes from PDF blocks for precise sizing
  */
 function detectSectionsFromStructure(structure) {
     const allSections = [];
@@ -332,46 +333,57 @@ function detectSectionsFromStructure(structure) {
 
         if (allBlocks.length === 0) continue;
 
-        // Find key zone boundaries
-        let headerEndY = 0;
-        let contactBarStart = -1;
-        let contactBarEnd = -1;
-        let mainContentStart = 0;
+        // Find header block (name - usually largest font at top)
+        let headerBlock = null;
+        let headerTopY = Infinity;
+        let headerBottomY = 0;
 
-        // Detect header zone (name + title at top)
+        // Find contact blocks (email, phone, address)
+        const contactBlocks = [];
+        let contactTopY = Infinity;
+        let contactBottomY = 0;
+
+        // First pass: identify header and contact blocks
         for (const block of allBlocks) {
             const y = block.bbox?.y || 0;
+            const h = block.bbox?.height || 20;
             const fontSize = block.font?.size || 12;
             const text = (block.text || '').trim();
+            const textLower = text.toLowerCase();
 
-            // Header zone: large text at top (name, title)
-            if (y < 120 && fontSize > 14) {
-                headerEndY = Math.max(headerEndY, y + (block.bbox?.height || 30) + 10);
+            // Header: large font in first 150px of page (name)
+            if (y < 150 && fontSize > 16) {
+                if (!headerBlock || fontSize > (headerBlock.font?.size || 0)) {
+                    headerBlock = block;
+                }
+                headerTopY = Math.min(headerTopY, y);
+                headerBottomY = Math.max(headerBottomY, y + h);
+            }
+
+            // Contact info: email, phone, or address patterns
+            const isContact = (
+                /@/.test(text) ||                                    // email
+                /\d{3}[-.\s]?\d{3}[-.\s]?\d{4,5}/.test(text) ||     // phone
+                /example\.com|exemple\.com/i.test(text) ||           // email domain
+                /township|street|avenue|city|zip|\d{5}/i.test(textLower) // address
+            );
+
+            if (isContact && y < 250) {
+                contactBlocks.push(block);
+                contactTopY = Math.min(contactTopY, y);
+                contactBottomY = Math.max(contactBottomY, y + h);
             }
         }
 
-        // Detect contact bar (email, phone line near top)
-        for (const block of allBlocks) {
-            const y = block.bbox?.y || 0;
-            const text = (block.text || '').toLowerCase();
-
-            // Contact info usually contains email/phone
-            if (y < 200 && (/@|phone|tel:|555-|exemple\.com|example\.com/i.test(text) ||
-                /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(text))) {
-                if (contactBarStart < 0) contactBarStart = y - 5;
-                contactBarEnd = Math.max(contactBarEnd, y + (block.bbox?.height || 20) + 5);
-            }
-        }
-
-        // Main content starts after header and contact bar
-        mainContentStart = Math.max(headerEndY, contactBarEnd, 0);
-
-        // Create major zones
+        // Create major zones with EXACT boundaries
         const pageSections = [];
         let sectionIndex = 1;
 
-        // 1. Header zone (name + title area) - light blue
-        if (headerEndY > 0) {
+        // If header found, calculate header zone from page top to header bottom
+        if (headerBlock && headerBottomY > 0) {
+            // Header zone ends where contact starts OR at header bottom
+            const headerZoneEnd = contactTopY < Infinity ? contactTopY : headerBottomY;
+
             pageSections.push({
                 id: `page${pageNum}_section_${sectionIndex++}`,
                 name: 'header',
@@ -379,7 +391,7 @@ function detectSectionsFromStructure(structure) {
                     x: 0,
                     y: 0,
                     width: pageWidth,
-                    height: contactBarStart > 0 ? contactBarStart : headerEndY
+                    height: headerZoneEnd  // From top of page to header zone end
                 },
                 backgroundColor: '#B8D4E8',
                 textColor: '#1A1A1A',
@@ -387,34 +399,37 @@ function detectSectionsFromStructure(structure) {
             });
         }
 
-        // 2. Contact bar zone - dark gray
-        if (contactBarStart > 0 && contactBarEnd > contactBarStart) {
+        // Contact bar zone - exact height from contact blocks
+        if (contactBlocks.length > 0 && contactTopY < Infinity) {
+            const contactHeight = contactBottomY - contactTopY;
+
             pageSections.push({
                 id: `page${pageNum}_section_${sectionIndex++}`,
                 name: 'contact',
                 bbox: {
                     x: 0,
-                    y: contactBarStart,
+                    y: contactTopY,
                     width: pageWidth,
-                    height: contactBarEnd - contactBarStart
+                    height: Math.max(contactHeight, 30)  // Minimum height for visibility
                 },
                 backgroundColor: '#4A5568',
                 textColor: '#FFFFFF',
                 pageNumber: pageNum
             });
-            mainContentStart = contactBarEnd;
         }
 
-        // 3. Main content area - white (rest of page)
-        if (mainContentStart < pageHeight - 50) {
+        // Main content area - from end of contact bar to page bottom
+        const contentStartY = contactBottomY > 0 ? contactBottomY : (headerBottomY > 0 ? headerBottomY : 0);
+
+        if (contentStartY > 0 && contentStartY < pageHeight - 50) {
             pageSections.push({
                 id: `page${pageNum}_section_${sectionIndex++}`,
                 name: 'content',
                 bbox: {
                     x: 0,
-                    y: mainContentStart,
+                    y: contentStartY,
                     width: pageWidth,
-                    height: pageHeight - mainContentStart
+                    height: pageHeight - contentStartY
                 },
                 backgroundColor: '#FFFFFF',
                 textColor: '#333333',
@@ -654,50 +669,274 @@ function findSectionForPosition(bbox, sections) {
 
 /**
  * Full semantic analysis pipeline
+ * Analyzes EACH PAGE separately with its own image
  * @param {Object} structure - Parsed PDF structure from pdfStructureParser
  * @param {Object|string} options - Options object or base64 image string for backward compatibility
  * @returns {Promise<Object>} Structure with semantic annotations
  */
 async function analyzeSemantics(structure, options = {}) {
-    let semantics;
-    let imageBase64 = null;
     let useAI = true;
 
-    // Handle backward compatibility: if options is a string, treat it as imageBase64
+    // Handle backward compatibility
     if (typeof options === 'string') {
-        imageBase64 = options;
+        // Old format - single image (ignore, use per-page images)
     } else if (options && typeof options === 'object') {
         useAI = options.useAI !== false;
-        imageBase64 = options.imageBase64 || null;
+    }
 
-        // If no explicit imageBase64 provided, try to get it from structure's pages
-        // Prefer aiImage (compressed) over backgroundImage for token efficiency
-        if (!imageBase64 && structure?.pages) {
-            // Find first page with a valid aiImage or backgroundImage
-            for (const page of structure.pages) {
-                // Prefer compressed AI image
-                if (page.aiImage && page.aiImage.startsWith('data:image')) {
-                    imageBase64 = page.aiImage;
-                    console.log(`Using compressed aiImage from page ${structure.pages.indexOf(page) + 1} for semantic analysis`);
-                    break;
-                }
-                // Fallback to backgroundImage
-                if (page.backgroundImage && page.backgroundImage.startsWith('data:image')) {
-                    imageBase64 = page.backgroundImage;
-                    console.log(`Using backgroundImage from page ${structure.pages.indexOf(page) + 1} for semantic analysis`);
-                    break;
-                }
+    // Analyze each page separately to get page-specific sections
+    const allMappings = [];
+    const allSections = [];
+
+    for (const page of structure.pages || []) {
+        const pageNum = page.pageNumber || 1;
+        const pageImage = page.aiImage || page.backgroundImage || null;
+
+        console.log(`📄 Analyzing page ${pageNum}...`, pageImage ? `with image (${pageImage.length} chars)` : 'no image');
+
+        let pageSemantics;
+
+        if (useAI && pageImage) {
+            // Try AI analysis for this specific page  
+            pageSemantics = await analyzePageWithAI(page, pageImage, pageNum);
+        }
+
+        // Fallback to heuristics for this page
+        if (!pageSemantics || !pageSemantics.sections || pageSemantics.sections.length === 0) {
+            pageSemantics = analyzePageWithHeuristics(page, pageNum);
+        }
+
+        // Collect mappings and sections with pageNumber
+        if (pageSemantics.mappings) {
+            for (const m of pageSemantics.mappings) {
+                m.pageNumber = pageNum;
+                allMappings.push(m);
             }
         }
+
+        if (pageSemantics.sections) {
+            for (const s of pageSemantics.sections) {
+                s.pageNumber = pageNum;
+                allSections.push(s);
+            }
+        }
+
+        console.log(`   ✅ Page ${pageNum}: ${pageSemantics.sections?.length || 0} sections found`);
     }
 
-    if (useAI) {
-        semantics = await analyzeWithAI(structure, imageBase64);
-    } else {
-        semantics = analyzeWithHeuristics(structure);
-    }
+    const semantics = {
+        mappings: allMappings,
+        sections: allSections
+    };
 
     return mergeStructureWithSemantics(structure, semantics);
+}
+
+/**
+ * Analyze a single page with AI (Gemini)
+ */
+async function analyzePageWithAI(page, imageBase64, pageNum) {
+    const useGemini = await ensureGemini();
+
+    if (!useGemini || !geminiModel || !imageBase64) {
+        return { mappings: [], sections: [] };
+    }
+
+    try {
+        const match = imageBase64.match(/^data:(image\/\w+);base64,(.*)$/i);
+        const mime = match ? match[1] : 'image/png';
+        const data = match ? match[2] : imageBase64.replace(/^data:.*?;base64,/, '');
+
+        const prompt = buildPageColorPrompt(page, pageNum);
+
+        const response = await geminiModel.generateContent([
+            { inlineData: { mimeType: mime, data } },
+            { text: prompt }
+        ]);
+
+        const result = response?.response?.text?.() || '';
+        const parsed = extractJSON(result);
+
+        if (parsed && parsed.sections) {
+            // Ensure all sections have pageNumber
+            for (const s of parsed.sections) {
+                s.pageNumber = pageNum;
+            }
+            return { mappings: parsed.mappings || [], sections: parsed.sections };
+        }
+    } catch (err) {
+        console.warn(`AI analysis failed for page ${pageNum}:`, err.message);
+    }
+
+    return { mappings: [], sections: [] };
+}
+
+/**
+ * Build prompt for page color analysis
+ */
+function buildPageColorPrompt(page, pageNum) {
+    const pageWidth = page.width || 612;
+    const pageHeight = page.height || 792;
+
+    return `Analyze this resume/CV page image and identify all colored rectangular regions/sections.
+
+PAGE INFO:
+- Page number: ${pageNum}
+- Page size: ${pageWidth} x ${pageHeight} pixels
+
+TASK: Find ALL distinct background color regions on this page.
+Look for: header areas, contact bars, sidebar sections, colored banners, section backgrounds.
+
+For EACH colored region, provide:
+1. Exact bounding box coordinates (x, y, width, height)
+2. Background color in HEX format (e.g., #B8D4E8)
+3. Text color used in that region
+4. Section name (header, contact, content, sidebar, etc.)
+
+IMPORTANT:
+- All sections must span FULL PAGE WIDTH (width = ${pageWidth})
+- x coordinate should be 0 for full-width sections
+- Be PRECISE with y and height values based on what you see
+- Include white sections too
+
+Return ONLY valid JSON:
+{
+  "sections": [
+    {
+      "id": "page${pageNum}_section_1",
+      "name": "header",
+      "bbox": {"x": 0, "y": 0, "width": ${pageWidth}, "height": 80},
+      "backgroundColor": "#B8D4E8",
+      "textColor": "#1A1A1A"
+    },
+    {
+      "id": "page${pageNum}_section_2", 
+      "name": "contact",
+      "bbox": {"x": 0, "y": 80, "width": ${pageWidth}, "height": 35},
+      "backgroundColor": "#4A5568",
+      "textColor": "#FFFFFF"
+    },
+    {
+      "id": "page${pageNum}_section_3",
+      "name": "content", 
+      "bbox": {"x": 0, "y": 115, "width": ${pageWidth}, "height": ${pageHeight - 115}},
+      "backgroundColor": "#FFFFFF",
+      "textColor": "#333333"
+    }
+  ]
+}`;
+}
+
+/**
+ * Analyze a single page with heuristics (fallback)
+ */
+function analyzePageWithHeuristics(page, pageNum) {
+    const pageWidth = page.width || 612;
+    const pageHeight = page.height || 792;
+    const sections = [];
+    const mappings = [];
+
+    // Sort blocks by Y position
+    const allBlocks = [...(page.blocks || [])].sort((a, b) =>
+        (a.bbox?.y || 0) - (b.bbox?.y || 0)
+    );
+
+    if (allBlocks.length === 0) {
+        // No blocks - just white background
+        sections.push({
+            id: `page${pageNum}_section_1`,
+            name: 'content',
+            bbox: { x: 0, y: 0, width: pageWidth, height: pageHeight },
+            backgroundColor: '#FFFFFF',
+            textColor: '#333333',
+            pageNumber: pageNum
+        });
+        return { mappings, sections };
+    }
+
+    // ONLY first page gets special treatment (header + contact bar)
+    if (pageNum === 1) {
+        let headerBottomY = 0;
+        let contactTopY = -1;
+        let contactBottomY = 0;
+
+        // Find header (large font at top)
+        for (const block of allBlocks) {
+            const y = block.bbox?.y || 0;
+            const h = block.bbox?.height || 20;
+            const fontSize = block.font?.size || 12;
+
+            if (y < 150 && fontSize > 16) {
+                headerBottomY = Math.max(headerBottomY, y + h);
+            }
+        }
+
+        // Find contact info (email, phone)
+        for (const block of allBlocks) {
+            const y = block.bbox?.y || 0;
+            const h = block.bbox?.height || 20;
+            const text = (block.text || '');
+
+            const isContact = /@/.test(text) || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4,5}/.test(text);
+
+            if (isContact && y < 250) {
+                if (contactTopY < 0) contactTopY = y;
+                contactBottomY = Math.max(contactBottomY, y + h);
+            }
+        }
+
+        let sectionIndex = 1;
+
+        // Header section (light blue)
+        if (headerBottomY > 0) {
+            const headerEnd = contactTopY > 0 ? contactTopY : headerBottomY;
+            sections.push({
+                id: `page${pageNum}_section_${sectionIndex++}`,
+                name: 'header',
+                bbox: { x: 0, y: 0, width: pageWidth, height: headerEnd },
+                backgroundColor: '#B8D4E8',
+                textColor: '#1A1A1A',
+                pageNumber: pageNum
+            });
+        }
+
+        // Contact bar (dark gray)
+        if (contactTopY > 0) {
+            sections.push({
+                id: `page${pageNum}_section_${sectionIndex++}`,
+                name: 'contact',
+                bbox: { x: 0, y: contactTopY, width: pageWidth, height: contactBottomY - contactTopY },
+                backgroundColor: '#4A5568',
+                textColor: '#FFFFFF',
+                pageNumber: pageNum
+            });
+        }
+
+        // Content area (white)
+        const contentStart = contactBottomY > 0 ? contactBottomY : headerBottomY;
+        if (contentStart < pageHeight - 50) {
+            sections.push({
+                id: `page${pageNum}_section_${sectionIndex++}`,
+                name: 'content',
+                bbox: { x: 0, y: contentStart, width: pageWidth, height: pageHeight - contentStart },
+                backgroundColor: '#FFFFFF',
+                textColor: '#333333',
+                pageNumber: pageNum
+            });
+        }
+    } else {
+        // Pages 2+: just white background
+        sections.push({
+            id: `page${pageNum}_section_1`,
+            name: 'content',
+            bbox: { x: 0, y: 0, width: pageWidth, height: pageHeight },
+            backgroundColor: '#FFFFFF',
+            textColor: '#333333',
+            pageNumber: pageNum
+        });
+    }
+
+    return { mappings, sections };
 }
 
 module.exports = {

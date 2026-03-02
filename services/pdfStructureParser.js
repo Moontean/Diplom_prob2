@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createCanvas, Image } = require('canvas');
+const { execSync } = require('child_process');
 
 // Lazy-load pdfjs-dist to avoid startup issues
 let pdfjsLib = null;
@@ -12,6 +13,67 @@ let pdfjsLib = null;
 // Логируем ошибку рендера страниц PDF→canvas только один раз,
 // чтобы не засорять консоль одинаковыми сообщениями для каждой страницы.
 let hasLoggedImageRenderError = false;
+
+/**
+ * Render PDF page using Poppler (pdftoppm) - FULL COLOR support
+ * @param {string} pdfPath - Path to PDF file
+ * @param {number} pageNum - Page number (1-based)
+ * @param {number} dpi - Resolution (default 150 for good quality + reasonable size)
+ * @returns {Promise<string|null>} Base64 PNG image or null on error
+ */
+async function renderPageWithPoppler(pdfPath, pageNum, dpi = 150) {
+    try {
+        // Create temp output path
+        const tempDir = path.join(path.dirname(pdfPath), 'temp_render');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const outputPrefix = path.join(tempDir, `page_${pageNum}`);
+
+        // Run pdftoppm: render single page to PNG
+        const cmd = `pdftoppm -png -r ${dpi} -f ${pageNum} -l ${pageNum} "${pdfPath}" "${outputPrefix}"`;
+        console.log(`🎨 Poppler render: page ${pageNum} at ${dpi} DPI`);
+
+        execSync(cmd, { stdio: 'pipe' });
+
+        // Find output file (pdftoppm adds page number suffix)
+        const outputFile = `${outputPrefix}-${pageNum}.png`;
+        const altOutputFile = `${outputPrefix}-${String(pageNum).padStart(2, '0')}.png`; // Sometimes uses 01, 02...
+
+        let pngPath = null;
+        if (fs.existsSync(outputFile)) {
+            pngPath = outputFile;
+        } else if (fs.existsSync(altOutputFile)) {
+            pngPath = altOutputFile;
+        } else {
+            // Try to find any PNG in temp dir
+            const files = fs.readdirSync(tempDir).filter(f => f.startsWith(`page_${pageNum}`) && f.endsWith('.png'));
+            if (files.length > 0) {
+                pngPath = path.join(tempDir, files[0]);
+            }
+        }
+
+        if (!pngPath || !fs.existsSync(pngPath)) {
+            console.warn(`⚠️ Poppler output not found for page ${pageNum}`);
+            return null;
+        }
+
+        // Read PNG and convert to base64
+        const pngBuffer = fs.readFileSync(pngPath);
+        const base64 = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+
+        // Cleanup temp file
+        fs.unlinkSync(pngPath);
+
+        console.log(`✅ Poppler: page ${pageNum} rendered (${base64.length} chars)`);
+        return base64;
+
+    } catch (err) {
+        console.error(`❌ Poppler render failed for page ${pageNum}:`, err.message);
+        return null;
+    }
+}
 
 /**
  * NodeCanvasFactory for PDF.js to work with node-canvas
@@ -601,17 +663,35 @@ function getFontWeight(fontName) {
 async function parsePdfStructure(pdfInput) {
     await ensurePdfJs();
 
+    // Track PDF file path for Poppler rendering
+    let pdfFilePath = null;
+
     // Load PDF data
     let data;
     if (Buffer.isBuffer(pdfInput)) {
+        // Save buffer to temp file for Poppler
+        const tempDir = path.join(__dirname, '..', 'uploads', 'temp_pdf');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+        pdfFilePath = path.join(tempDir, `temp_${Date.now()}.pdf`);
+        fs.writeFileSync(pdfFilePath, pdfInput);
         data = new Uint8Array(pdfInput);
     } else if (typeof pdfInput === 'string') {
         if (pdfInput.startsWith('data:')) {
-            // Base64 data URL
+            // Base64 data URL - save to temp file
             const base64 = pdfInput.replace(/^data:.*?;base64,/, '');
-            data = new Uint8Array(Buffer.from(base64, 'base64'));
+            const buf = Buffer.from(base64, 'base64');
+            const tempDir = path.join(__dirname, '..', 'uploads', 'temp_pdf');
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
+            pdfFilePath = path.join(tempDir, `temp_${Date.now()}.pdf`);
+            fs.writeFileSync(pdfFilePath, buf);
+            data = new Uint8Array(buf);
         } else {
-            // File path
+            // File path - use directly for Poppler
+            pdfFilePath = pdfInput;
             const buf = fs.readFileSync(pdfInput);
             data = new Uint8Array(buf);
         }
@@ -643,37 +723,44 @@ async function parsePdfStructure(pdfInput) {
         let aiImage = null; // Compressed version for AI analysis
         let pageCanvas = null; // Canvas for block background extraction
 
+        // PRIORITY 1: Use Poppler for FULL COLOR rendering (for AI analysis)
+        if (pdfFilePath) {
+            console.log(`🎨 Using Poppler for page ${pageNum}...`);
+            aiImage = await renderPageWithPoppler(pdfFilePath, pageNum, 150);
+            if (aiImage) {
+                console.log(`✅ Poppler: Full color image ready for AI`);
+            }
+        }
+
+        // PRIORITY 2: Try PDF.js canvas render (for block backgrounds, may be B&W)
         try {
-            console.log(`🚀 Rendering page ${pageNum} to canvas...`);
-            // First render to canvas (for block background extraction)
+            console.log(`🚀 Rendering page ${pageNum} to canvas (PDF.js)...`);
             pageCanvas = await renderPageToCanvas(page, 2.0);
 
             if (pageCanvas) {
                 console.log(`✅ Page ${pageNum}: Canvas rendered (${pageCanvas.width}x${pageCanvas.height})`);
-                // Convert canvas to base64 for full background
                 backgroundImage = pageCanvas.canvas.toDataURL('image/png');
                 console.log(`   📊 Background image: ${backgroundImage.length} chars`);
             }
-
-            // Also render a smaller version for AI (to fit in context window)
-            aiImage = await renderPageToImage(page, 2.0, { forAI: true, quality: 0.8 });
-
-            if (aiImage) {
-                console.log(`✅ Page ${pageNum}: AI image rendered`);
-                console.log(`   📊 AI Image length: ${aiImage.length} chars`);
-            }
         } catch (err) {
-            console.error(`❌ Failed to render page ${pageNum}:`, err.message);
-            // Try renderPageToImage as fallback for AI
+            console.warn(`⚠️ PDF.js canvas render failed: ${err.message}`);
+        }
+
+        // Use Poppler image as background if PDF.js failed
+        if (!backgroundImage && aiImage) {
+            backgroundImage = aiImage;
+        }
+
+        // Fallback: PDF.js renderPageToImage if Poppler failed
+        if (!aiImage) {
             try {
-                console.log(`🔄 Attempting fallback render for page ${pageNum}...`);
+                console.log(`🔄 Fallback to PDF.js for AI image...`);
                 aiImage = await renderPageToImage(page, 2.0, { forAI: true, quality: 0.8 });
                 if (aiImage) {
-                    console.log(`✅ Page ${pageNum}: Fallback AI image rendered (${aiImage.length} chars)`);
-                    backgroundImage = aiImage; // Use same image as background
+                    console.log(`✅ Page ${pageNum}: PDF.js AI image rendered (${aiImage.length} chars)`);
                 }
-            } catch (fallbackErr) {
-                console.error(`❌ Fallback also failed for page ${pageNum}:`, fallbackErr.message);
+            } catch (err) {
+                console.error(`❌ All render methods failed for page ${pageNum}`);
             }
         }
 
