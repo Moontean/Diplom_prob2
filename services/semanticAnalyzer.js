@@ -95,8 +95,8 @@ async function ensureGemini() {
             GoogleGenerativeAI = mod.GoogleGenerativeAI;
         }
         const genAI = new GoogleGenerativeAI(geminiKey);
-        geminiModel = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
-        console.log('✅ Gemini model initialized: gemini-3-flash-preview');
+        geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        console.log('✅ Gemini model initialized: gemini-2.5-flash');
         return true;
     } catch (err) {
         console.warn('⚠️ Gemini initialization failed:', err.message);

@@ -329,18 +329,28 @@ body {
     transition: background-color 0.3s ease;
 }
 
+/* Separator lines from PDF */
+.cv-separator-line {
+    position: absolute;
+    z-index: 1;
+    pointer-events: none;
+}
+
 .cv-block {
     position: absolute;
-    white-space: pre-wrap;
+    white-space: nowrap;
     overflow: hidden;
-    line-height: 1.2;
+    text-overflow: ellipsis;
+    line-height: 1.25;
     z-index: 1;
 }
 
 .cv-line {
     position: absolute;
     white-space: nowrap;
-    overflow: visible;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
     z-index: 1;
 }
 
@@ -431,14 +441,25 @@ body {
  */
 function generatePageHtml(page, pageIndex, fieldMappings, options) {
     const { usePlaceholders, includeDataAttributes, userData } = options;
-    const lines = page.lines || [];
+    const textLines = page.lines || []; // Text lines
     const blocks = page.blocks || [];
-    const backgrounds = page.backgrounds || [];
-    const colorSections = page.colorSections || []; // AI-detected color sections
+    const backgrounds = page.backgrounds || []; // EXACT rectangles from PDF
+    const separatorLines = page.separatorLines || page.lines2 || []; // Separator lines (renamed to avoid conflict)
+    const colorSections = page.colorSections || []; // AI-detected color sections (fallback)
 
-    // Priority 1: Generate AI-detected color sections (pure CSS, no PNG)
+    // Priority 1: Use EXACT backgrounds extracted from PDF (pixel-perfect)
+    let backgroundsHtml = '';
+    if (backgrounds.length > 0) {
+        console.log(`📐 Page ${pageIndex + 1}: Using ${backgrounds.length} exact backgrounds from PDF`);
+        backgroundsHtml = backgrounds.map((bg, idx) => {
+            return `        <div class="cv-background" data-bg-id="${bg.id}" style="position: absolute; left: ${bg.bbox.x}px; top: ${bg.bbox.y}px; width: ${bg.bbox.width}px; height: ${bg.bbox.height}px; background-color: ${bg.color}; z-index: 0; pointer-events: none;"></div>`;
+        }).join('\n');
+    }
+
+    // Priority 2: Fallback to AI-detected sections if no PDF backgrounds
     let sectionsHtml = '';
-    if (colorSections.length > 0) {
+    if (backgroundsHtml === '' && colorSections.length > 0) {
+        console.log(`🤖 Page ${pageIndex + 1}: Using ${colorSections.length} AI-detected sections (fallback)`);
         sectionsHtml = colorSections.map((section, idx) => {
             if (!section.bbox) return '';
 
@@ -457,18 +478,30 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
         }).filter(html => html).join('\n');
     }
 
-    // Priority 2: Fallback to extracted backgrounds if no AI sections
-    let backgroundsHtml = '';
-    if (sectionsHtml === '' && backgrounds.length > 0) {
-        backgroundsHtml = backgrounds.map((bg, idx) => {
-            return `        <div class="cv-background" data-bg-id="${bg.id}" style="position: absolute; left: ${bg.bbox.x}px; top: ${bg.bbox.y}px; width: ${bg.bbox.width}px; height: ${bg.bbox.height}px; background-color: ${bg.color}; z-index: 0;"></div>`;
+    // Render separator lines from PDF
+    let linesHtml = '';
+    const pdfLines = page.pdfLines || []; // From extractBackgrounds
+    if (pdfLines.length > 0) {
+        console.log(`📏 Page ${pageIndex + 1}: Rendering ${pdfLines.length} separator lines`);
+        linesHtml = pdfLines.map((line, idx) => {
+            const lineStyle = [
+                'position: absolute',
+                `left: ${line.bbox.x}px`,
+                `top: ${line.bbox.y}px`,
+                `width: ${line.bbox.width}px`,
+                `height: ${Math.max(line.bbox.height, line.width || 1)}px`,
+                `background-color: ${line.color}`,
+                'z-index: 1',
+                'pointer-events: none'
+            ].join('; ');
+            return `        <div class="cv-separator-line" data-line-id="${line.id}" style="${lineStyle}"></div>`;
         }).join('\n');
     }
 
-    const allBackgroundElements = sectionsHtml || backgroundsHtml;
+    const allBackgroundElements = (backgroundsHtml || sectionsHtml) + (linesHtml ? '\n' + linesHtml : '');
 
-    // Prefer lines if available, fallback to blocks
-    const elements = lines.length > 0 ? lines : blocks;
+    // Prefer text lines if available, fallback to blocks
+    const elements = textLines.length > 0 ? textLines : blocks;
 
     let elementsHtml = elements.map((element, idx) => {
         const blockId = element.id || `p${pageIndex}_b${idx}`;
@@ -483,7 +516,8 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
             usePlaceholders,
             includeDataAttributes,
             userData,
-            pageIndex
+            pageIndex,
+            pageWidth: page.width || 612
         });
     }).join('\n');
 
@@ -518,7 +552,8 @@ function generateElementHtml(element, options) {
         usePlaceholders,
         includeDataAttributes,
         userData,
-        pageIndex
+        pageIndex,
+        pageWidth
     } = options;
 
     const bbox = element.bbox;
@@ -538,7 +573,7 @@ function generateElementHtml(element, options) {
     // Build style - use AI-determined textColor if available, otherwise font color
     // NOTE: backgroundColor is now handled by section divs, not individual blocks
     const textColor = element.textColor || font.color || null;
-    const style = buildElementStyle(bbox, font, true, null, null, textColor);
+    const style = buildElementStyle(bbox, font, true, null, null, textColor, pageWidth);
 
     // Build data attributes for binding
     let dataAttrs = '';
@@ -566,7 +601,7 @@ function generateElementHtml(element, options) {
 /**
  * Build inline style for element positioning
  */
-function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor = null, backgroundImage = null, textColor = null) {
+function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor = null, backgroundImage = null, textColor = null, pageWidth = 612) {
     const styles = [];
 
     // Position (PDF coordinates: origin at bottom-left, HTML: top-left)
@@ -575,14 +610,15 @@ function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor 
         styles.push('position: absolute');
         styles.push(`left: ${bbox.x.toFixed(1)}px`);
         styles.push(`top: ${bbox.y.toFixed(1)}px`);
-        styles.push('white-space: nowrap');
 
-        // Width and height are optional
+        // Width from PDF bbox
         if (bbox.width && bbox.width > 0) {
             styles.push(`width: ${bbox.width.toFixed(1)}px`);
         }
+        // Height from PDF bbox - add 25% extra to prevent text cutoff
         if (bbox.height && bbox.height > 0) {
-            styles.push(`height: ${bbox.height.toFixed(1)}px`);
+            const adjustedHeight = bbox.height * 1.25;
+            styles.push(`height: ${adjustedHeight.toFixed(1)}px`);
         }
     }
 

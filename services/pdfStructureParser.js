@@ -465,37 +465,27 @@ function getOPS() {
 }
 
 /**
- * Extract background shapes (rectangles, paths) with colors from PDF
+ * Extract background shapes (rectangles, paths) AND lines (strokes) from PDF
  * @param {Object} page - PDF.js page object
  * @param {Object} viewport - PDF viewport for coordinate conversion
- * @returns {Promise<Array>} Array of background elements
+ * @returns {Promise<{backgrounds: Array, lines: Array}>} Backgrounds and lines
  */
 async function extractBackgrounds(page, viewport) {
     const backgrounds = [];
+    const lines = []; // Разделительные линии
     const OPS = getOPS();
 
     try {
         const operatorList = await page.getOperatorList();
         const { fnArray, argsArray } = operatorList;
 
-        console.log(`🔍 Analyzing ${fnArray.length} PDF operators for backgrounds...`);
-
-        // Debug: count operator types
-        const opCounts = {};
-        for (const fn of fnArray) {
-            opCounts[fn] = (opCounts[fn] || 0) + 1;
-        }
-        // Log interesting operators
-        const interestingOps = [OPS.setFillRGBColor, OPS.setFillGray, OPS.setFillCMYKColor, OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.rectangle, OPS.constructPath];
-        const foundOps = Object.entries(opCounts)
-            .filter(([op]) => interestingOps.includes(Number(op)))
-            .map(([op, count]) => `${op}:${count}`);
-        console.log(`🎨 Interesting operators: ${foundOps.join(', ') || 'none'}`);
+        console.log(`🔍 Analyzing ${fnArray.length} PDF operators for backgrounds and lines...`);
 
         // State tracking
         let currentFillColor = '#ffffff';
+        let currentStrokeColor = '#000000';
+        let currentLineWidth = 1;
         let currentPath = [];
-        let transformMatrix = [1, 0, 0, 1, 0, 0]; // Identity matrix
         const transformStack = [];
 
         // Debug: track found colors
@@ -508,11 +498,14 @@ async function extractBackgrounds(page, viewport) {
             switch (fn) {
                 // Save/Restore graphics state
                 case OPS.save:
-                    transformStack.push([...transformMatrix]);
+                    transformStack.push({ fillColor: currentFillColor, strokeColor: currentStrokeColor, lineWidth: currentLineWidth });
                     break;
                 case OPS.restore:
                     if (transformStack.length > 0) {
-                        transformMatrix = transformStack.pop();
+                        const state = transformStack.pop();
+                        currentFillColor = state.fillColor;
+                        currentStrokeColor = state.strokeColor;
+                        currentLineWidth = state.lineWidth;
                     }
                     break;
 
@@ -532,7 +525,6 @@ async function extractBackgrounds(page, viewport) {
                     }
                     break;
                 case OPS.setFillCMYKColor:
-                    // Convert CMYK to RGB (simplified)
                     if (args.length >= 4) {
                         const [c, m, y, k] = args;
                         const r = 1 - Math.min(1, c * (1 - k) + k);
@@ -540,6 +532,39 @@ async function extractBackgrounds(page, viewport) {
                         const b = 1 - Math.min(1, y * (1 - k) + k);
                         currentFillColor = rgbToHex(r, g, b);
                         foundColors.add(currentFillColor);
+                    }
+                    break;
+
+                // Set stroke color
+                case OPS.setStrokeRGBColor:
+                    if (args.length >= 3) {
+                        currentStrokeColor = rgbToHex(args[0], args[1], args[2]);
+                        foundColors.add(currentStrokeColor);
+                    }
+                    break;
+                case OPS.setStrokeGray:
+                    if (args.length >= 1) {
+                        const gray = Math.round(args[0] * 255);
+                        const hex = gray.toString(16).padStart(2, '0');
+                        currentStrokeColor = `#${hex}${hex}${hex}`;
+                        foundColors.add(currentStrokeColor);
+                    }
+                    break;
+                case OPS.setStrokeCMYKColor:
+                    if (args.length >= 4) {
+                        const [c, m, y, k] = args;
+                        const r = 1 - Math.min(1, c * (1 - k) + k);
+                        const g = 1 - Math.min(1, m * (1 - k) + k);
+                        const b = 1 - Math.min(1, y * (1 - k) + k);
+                        currentStrokeColor = rgbToHex(r, g, b);
+                        foundColors.add(currentStrokeColor);
+                    }
+                    break;
+
+                // Line width
+                case 6: // setLineWidth
+                    if (args.length >= 1) {
+                        currentLineWidth = args[0];
                     }
                     break;
 
@@ -556,26 +581,25 @@ async function extractBackgrounds(page, viewport) {
 
                 // Construct path (moveTo, lineTo, etc.)
                 case OPS.constructPath:
-                    // args: [opsArray, argsArray]; иногда в PDF попадаются странные записи,
-                    // поэтому обязательно проверяем, что это массивы.
                     if (args && Array.isArray(args[0]) && Array.isArray(args[1])) {
-                        const ops = args[0]; // Array of path operations
-                        const pathArgs = args[1]; // Array of arguments
+                        const ops = args[0];
+                        const pathArgs = args[1];
                         let argIndex = 0;
                         let minX = Infinity, minY = Infinity;
                         let maxX = -Infinity, maxY = -Infinity;
+                        let pathPoints = [];
 
                         for (const op of ops) {
-                            // Extract bounding box from path
                             if (op === 13 || op === 14) { // moveTo, lineTo
                                 const px = pathArgs[argIndex++];
                                 const py = pathArgs[argIndex++];
+                                pathPoints.push({ x: px, y: py });
                                 minX = Math.min(minX, px);
                                 minY = Math.min(minY, py);
                                 maxX = Math.max(maxX, px);
                                 maxY = Math.max(maxY, py);
                             } else if (op === 15) { // curveTo (bezier)
-                                argIndex += 6; // Skip 6 args
+                                argIndex += 6;
                             } else if (op === 18) { // rectangle
                                 const rx = pathArgs[argIndex++];
                                 const ry = pathArgs[argIndex++];
@@ -594,7 +618,8 @@ async function extractBackgrounds(page, viewport) {
                                 x: minX,
                                 y: minY,
                                 w: maxX - minX,
-                                h: maxY - minY
+                                h: maxY - minY,
+                                points: pathPoints
                             });
                         }
                     }
@@ -605,10 +630,8 @@ async function extractBackgrounds(page, viewport) {
                 case OPS.eoFill:
                 case OPS.fillStroke:
                     for (const shape of currentPath) {
-                        // Convert PDF coordinates to HTML (top-left origin)
                         const htmlY = viewport.height - shape.y - shape.h;
 
-                        // Filter out very small shapes and pure white backgrounds
                         if (shape.w > 5 && shape.h > 5 && currentFillColor !== '#ffffff') {
                             backgrounds.push({
                                 id: `bg_${backgrounds.length}`,
@@ -623,21 +646,46 @@ async function extractBackgrounds(page, viewport) {
                             });
                         }
                     }
-                    currentPath = []; // Clear path after fill
+                    currentPath = [];
+                    break;
+
+                // Stroke operations - extract lines
+                case 17: // stroke
+                    for (const shape of currentPath) {
+                        const htmlY = viewport.height - shape.y - shape.h;
+
+                        // Detect if it's a line (very thin height or width)
+                        const isHorizontalLine = shape.h < 5 && shape.w > 10;
+                        const isVerticalLine = shape.w < 5 && shape.h > 10;
+
+                        if (isHorizontalLine || isVerticalLine) {
+                            lines.push({
+                                id: `line_${lines.length}`,
+                                type: isHorizontalLine ? 'horizontal' : 'vertical',
+                                color: currentStrokeColor,
+                                width: currentLineWidth,
+                                bbox: {
+                                    x: Math.round(shape.x * 100) / 100,
+                                    y: Math.round(htmlY * 100) / 100,
+                                    width: Math.round(Math.max(shape.w, currentLineWidth) * 100) / 100,
+                                    height: Math.round(Math.max(shape.h, currentLineWidth) * 100) / 100
+                                }
+                            });
+                        }
+                    }
+                    currentPath = [];
                     break;
             }
         }
 
-        console.log(`🎨 Extracted ${backgrounds.length} background elements`);
+        console.log(`🎨 Extracted ${backgrounds.length} backgrounds, ${lines.length} lines`);
         console.log(`🎨 Found colors: ${[...foundColors].join(', ') || 'none'}`);
-        if (backgrounds.length > 0) {
-            console.log(`🎨 First 3 backgrounds:`, backgrounds.slice(0, 3));
-        }
-        return backgrounds;
+
+        return { backgrounds, lines };
 
     } catch (err) {
         console.warn('Could not extract backgrounds:', err.message);
-        return [];
+        return { backgrounds: [], lines: [] };
     }
 }
 
@@ -771,12 +819,15 @@ async function parsePdfStructure(pdfInput) {
             backgroundImage: backgroundImage, // Base64 PNG image with all visual elements (null if render failed)
             aiImage: aiImage, // Compressed JPEG for AI analysis
             backgrounds: [], // Extracted background shapes with colors
+            pdfLines: [], // Extracted separator lines (renamed to avoid conflict with text lines)
             blocks: []
         };
 
-        // Extract background shapes (rectangles, colored areas)
+        // Extract background shapes (rectangles, colored areas) and lines
         try {
-            pageData.backgrounds = await extractBackgrounds(page, viewport);
+            const extracted = await extractBackgrounds(page, viewport);
+            pageData.backgrounds = extracted.backgrounds || [];
+            pageData.pdfLines = extracted.lines || [];
         } catch (err) {
             console.warn(`⚠️ Could not extract backgrounds for page ${pageNum}:`, err.message);
         }
