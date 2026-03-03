@@ -258,13 +258,366 @@ function generateHtmlDocument(parsedStructure, semanticAnalysis, options = {}) {
                     backgrounds: Array.from(bgColors),
                     text: Array.from(textColors)
                 };
+            },
+
+            // ============ CANVA-LIKE EDITOR API ============
+            
+            _selectedElement: null,
+            _isEditing: false,
+            _history: [],
+            _historyIndex: -1,
+            
+            /**
+             * Initialize the visual editor
+             */
+            initEditor: function() {
+                var self = this;
+                
+                // Create toolbar
+                this._createToolbar();
+                
+                // Add click handlers to all editable elements
+                document.querySelectorAll('.cv-block, .cv-line, .cv-section, .cv-background').forEach(function(el) {
+                    // Single click - select
+                    el.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        self._selectElement(el);
+                    });
+                    
+                    // Double click - start editing (text only)
+                    el.addEventListener('dblclick', function(e) {
+                        e.stopPropagation();
+                        if (el.classList.contains('cv-block') || el.classList.contains('cv-line')) {
+                            self._startEditing(el);
+                        }
+                    });
+                    
+                    // Right click - context menu
+                    el.addEventListener('contextmenu', function(e) {
+                        e.preventDefault();
+                        self._showContextMenu(e, el);
+                    });
+                });
+                
+                // Click outside to deselect
+                document.addEventListener('click', function(e) {
+                    if (!e.target.closest('.cv-block, .cv-line, .cv-section, .cv-background, .cv-editor-toolbar, .cv-context-menu')) {
+                        self._deselectAll();
+                    }
+                });
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', function(e) {
+                    // Escape - deselect/stop editing
+                    if (e.key === 'Escape') {
+                        if (self._isEditing) {
+                            self._stopEditing();
+                        } else {
+                            self._deselectAll();
+                        }
+                    }
+                    // Ctrl+Z - undo
+                    if (e.ctrlKey && e.key === 'z') {
+                        e.preventDefault();
+                        self.undo();
+                    }
+                    // Ctrl+Y - redo
+                    if (e.ctrlKey && e.key === 'y') {
+                        e.preventDefault();
+                        self.redo();
+                    }
+                    // Delete - delete selected element
+                    if (e.key === 'Delete' && self._selectedElement && !self._isEditing) {
+                        self._deleteSelected();
+                    }
+                });
+                
+                console.log('🎨 Canva-like editor initialized');
+            },
+            
+            /**
+             * Create the floating toolbar
+             */
+            _createToolbar: function() {
+                var self = this;
+                var existing = document.querySelector('.cv-editor-toolbar');
+                if (existing) existing.remove();
+                
+                var toolbar = document.createElement('div');
+                toolbar.className = 'cv-editor-toolbar';
+                toolbar.innerHTML = 
+                    '<button id="btn-bold" title="Bold (Ctrl+B)"><b>B</b></button>' +
+                    '<button id="btn-italic" title="Italic (Ctrl+I)"><i>I</i></button>' +
+                    '<button id="btn-underline" title="Underline (Ctrl+U)"><u>U</u></button>' +
+                    '<div class="separator"></div>' +
+                    '<label title="Text Color">🖌️<input type="color" id="color-text" value="#000000"></label>' +
+                    '<label title="Background Color">🎨<input type="color" id="color-bg" value="#ffffff"></label>' +
+                    '<div class="separator"></div>' +
+                    '<select id="font-size" title="Font Size">' +
+                        '<option value="">Size</option>' +
+                        '<option value="10px">10</option>' +
+                        '<option value="12px">12</option>' +
+                        '<option value="14px">14</option>' +
+                        '<option value="16px">16</option>' +
+                        '<option value="18px">18</option>' +
+                        '<option value="20px">20</option>' +
+                        '<option value="24px">24</option>' +
+                        '<option value="28px">28</option>' +
+                        '<option value="32px">32</option>' +
+                        '<option value="36px">36</option>' +
+                    '</select>' +
+                    '<div class="separator"></div>' +
+                    '<button id="btn-undo" title="Undo (Ctrl+Z)">↩️</button>' +
+                    '<button id="btn-redo" title="Redo (Ctrl+Y)">↪️</button>';
+                
+                document.body.appendChild(toolbar);
+                
+                // Bind toolbar events
+                document.getElementById('btn-bold').onclick = function() { self._toggleStyle('fontWeight', 'bold', 'normal'); };
+                document.getElementById('btn-italic').onclick = function() { self._toggleStyle('fontStyle', 'italic', 'normal'); };
+                document.getElementById('btn-underline').onclick = function() { self._toggleStyle('textDecoration', 'underline', 'none'); };
+                
+                document.getElementById('color-text').onchange = function(e) {
+                    if (self._selectedElement) {
+                        self._saveToHistory();
+                        self._selectedElement.style.color = e.target.value;
+                    }
+                };
+                
+                document.getElementById('color-bg').onchange = function(e) {
+                    if (self._selectedElement) {
+                        self._saveToHistory();
+                        self._selectedElement.style.backgroundColor = e.target.value;
+                    }
+                };
+                
+                document.getElementById('font-size').onchange = function(e) {
+                    if (self._selectedElement && e.target.value) {
+                        self._saveToHistory();
+                        self._selectedElement.style.fontSize = e.target.value;
+                    }
+                };
+                
+                document.getElementById('btn-undo').onclick = function() { self.undo(); };
+                document.getElementById('btn-redo').onclick = function() { self.redo(); };
+            },
+            
+            /**
+             * Select an element
+             */
+            _selectElement: function(el) {
+                this._deselectAll();
+                el.classList.add('selected');
+                this._selectedElement = el;
+                
+                // Update toolbar color inputs
+                var colorText = document.getElementById('color-text');
+                var colorBg = document.getElementById('color-bg');
+                if (colorText) colorText.value = this._getColorHex(el.style.color) || '#000000';
+                if (colorBg) colorBg.value = this._getColorHex(el.style.backgroundColor) || '#ffffff';
+            },
+            
+            /**
+             * Deselect all elements
+             */
+            _deselectAll: function() {
+                this._stopEditing();
+                document.querySelectorAll('.selected').forEach(function(el) {
+                    el.classList.remove('selected');
+                });
+                this._selectedElement = null;
+                this._hideContextMenu();
+            },
+            
+            /**
+             * Start editing text element
+             */
+            _startEditing: function(el) {
+                this._saveToHistory();
+                this._isEditing = true;
+                el.classList.add('editing');
+                el.contentEditable = 'true';
+                el.focus();
+                
+                // Select all text
+                var range = document.createRange();
+                range.selectNodeContents(el);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            },
+            
+            /**
+             * Stop editing
+             */
+            _stopEditing: function() {
+                if (!this._isEditing) return;
+                this._isEditing = false;
+                document.querySelectorAll('.editing').forEach(function(el) {
+                    el.classList.remove('editing');
+                    el.contentEditable = 'false';
+                });
+            },
+            
+            /**
+             * Toggle a style property
+             */
+            _toggleStyle: function(prop, onValue, offValue) {
+                if (!this._selectedElement) return;
+                this._saveToHistory();
+                var current = this._selectedElement.style[prop];
+                this._selectedElement.style[prop] = (current === onValue) ? offValue : onValue;
+            },
+            
+            /**
+             * Show context menu
+             */
+            _showContextMenu: function(e, el) {
+                var self = this;
+                this._hideContextMenu();
+                this._selectElement(el);
+                
+                var menu = document.createElement('div');
+                menu.className = 'cv-context-menu';
+                
+                var isTextElement = el.classList.contains('cv-block') || el.classList.contains('cv-line');
+                
+                var items = [
+                    { label: '✏️ Edit', action: function() { if(isTextElement) self._startEditing(el); } },
+                    { label: '📋 Copy', action: function() { self._copyElement(el); } },
+                    { label: '📝 Duplicate', action: function() { self._duplicateElement(el); } },
+                    { divider: true },
+                    { label: '🔼 Bring to Front', action: function() { el.style.zIndex = 100; } },
+                    { label: '🔽 Send to Back', action: function() { el.style.zIndex = 0; } },
+                    { divider: true },
+                    { label: '🗑️ Delete', className: 'danger', action: function() { self._deleteSelected(); } }
+                ];
+                
+                items.forEach(function(item) {
+                    if (item.divider) {
+                        var div = document.createElement('div');
+                        div.className = 'cv-context-menu-divider';
+                        menu.appendChild(div);
+                    } else {
+                        var menuItem = document.createElement('div');
+                        menuItem.className = 'cv-context-menu-item' + (item.className ? ' ' + item.className : '');
+                        menuItem.textContent = item.label;
+                        menuItem.onclick = function() {
+                            item.action();
+                            self._hideContextMenu();
+                        };
+                        menu.appendChild(menuItem);
+                    }
+                });
+                
+                menu.style.left = e.clientX + 'px';
+                menu.style.top = e.clientY + 'px';
+                document.body.appendChild(menu);
+            },
+            
+            /**
+             * Hide context menu
+             */
+            _hideContextMenu: function() {
+                var menu = document.querySelector('.cv-context-menu');
+                if (menu) menu.remove();
+            },
+            
+            /**
+             * Delete selected element
+             */
+            _deleteSelected: function() {
+                if (this._selectedElement) {
+                    this._saveToHistory();
+                    this._selectedElement.remove();
+                    this._selectedElement = null;
+                }
+            },
+            
+            /**
+             * Duplicate element
+             */
+            _duplicateElement: function(el) {
+                this._saveToHistory();
+                var clone = el.cloneNode(true);
+                clone.style.left = (parseFloat(el.style.left) + 10) + 'px';
+                clone.style.top = (parseFloat(el.style.top) + 10) + 'px';
+                clone.classList.remove('selected', 'editing');
+                el.parentNode.appendChild(clone);
+                this._selectElement(clone);
+            },
+            
+            /**
+             * Copy element text to clipboard
+             */
+            _copyElement: function(el) {
+                navigator.clipboard.writeText(el.textContent || '');
+            },
+            
+            /**
+             * Convert color to hex
+             */
+            _getColorHex: function(color) {
+                if (!color) return null;
+                if (color.startsWith('#')) return color;
+                if (color.startsWith('rgb')) {
+                    var match = color.match(/\\d+/g);
+                    if (match && match.length >= 3) {
+                        return '#' + match.slice(0, 3).map(function(x) {
+                            var hex = parseInt(x).toString(16);
+                            return hex.length === 1 ? '0' + hex : hex;
+                        }).join('');
+                    }
+                }
+                return null;
+            },
+            
+            /**
+             * Save state to history for undo
+             */
+            _saveToHistory: function() {
+                var state = document.querySelector('.cv-document').innerHTML;
+                this._history = this._history.slice(0, this._historyIndex + 1);
+                this._history.push(state);
+                this._historyIndex = this._history.length - 1;
+                if (this._history.length > 50) {
+                    this._history.shift();
+                    this._historyIndex--;
+                }
+            },
+            
+            /**
+             * Undo last action
+             */
+            undo: function() {
+                if (this._historyIndex > 0) {
+                    this._historyIndex--;
+                    document.querySelector('.cv-document').innerHTML = this._history[this._historyIndex];
+                    this._deselectAll();
+                }
+            },
+            
+            /**
+             * Redo action
+             */
+            redo: function() {
+                if (this._historyIndex < this._history.length - 1) {
+                    this._historyIndex++;
+                    document.querySelector('.cv-document').innerHTML = this._history[this._historyIndex];
+                    this._deselectAll();
+                }
             }
         };
+        
+        // Auto-initialize editor
+        document.addEventListener('DOMContentLoaded', function() {
+            CVFields.initEditor();
+        });
         
         // Legacy alias for backward compatibility
         window.CVPlaceholders = window.CVFields;
         
-        console.log('✅ CV Editor ready. Use CVFields.getSections() to see color sections.');
+        console.log('✅ CV Editor ready. Use CVFields.initEditor() to enable Canva-like editing.');
     </script>
 </body>
 </html>`;
@@ -394,6 +747,154 @@ body {
 .editable-field:focus {
     outline: 2px solid #2196F3;
     background: rgba(33, 150, 243, 0.05);
+}
+
+/* ========== CANVA-LIKE EDITOR STYLES ========== */
+
+/* Hover effect - yellow outline on any editable element */
+.editable-field:hover,
+.cv-block:hover,
+.cv-line:hover,
+.cv-section:hover,
+.cv-background:hover {
+    outline: 2px solid #FFD700;
+    outline-offset: 2px;
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* Active/selected element - blue outline */
+.editable-field.selected,
+.cv-block.selected,
+.cv-line.selected,
+.cv-section.selected,
+.cv-background.selected {
+    outline: 2px solid #2196F3;
+    outline-offset: 2px;
+    z-index: 11;
+}
+
+/* Editing mode - element being edited */
+.editable-field.editing,
+.cv-block.editing,
+.cv-line.editing {
+    outline: 3px solid #4CAF50;
+    outline-offset: 2px;
+    background: rgba(255, 255, 255, 0.95) !important;
+    z-index: 12;
+    cursor: text;
+    white-space: pre-wrap !important;
+    overflow: visible !important;
+}
+
+/* Resize handles for selected elements */
+.resize-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #2196F3;
+    border: 1px solid white;
+    border-radius: 2px;
+    z-index: 100;
+}
+
+.resize-handle.nw { top: -4px; left: -4px; cursor: nw-resize; }
+.resize-handle.ne { top: -4px; right: -4px; cursor: ne-resize; }
+.resize-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
+.resize-handle.se { bottom: -4px; right: -4px; cursor: se-resize; }
+
+/* Editor toolbar */
+.cv-editor-toolbar {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 8px 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 1000;
+    font-family: Arial, sans-serif;
+}
+
+.cv-editor-toolbar button {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.cv-editor-toolbar button:hover {
+    background: #e0e0e0;
+}
+
+.cv-editor-toolbar button.active {
+    background: #2196F3;
+    color: white;
+    border-color: #1976D2;
+}
+
+.cv-editor-toolbar .separator {
+    width: 1px;
+    height: 24px;
+    background: #ddd;
+    margin: 0 4px;
+}
+
+.cv-editor-toolbar input[type="color"] {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.cv-editor-toolbar select {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* Context menu for right-click */
+.cv-context-menu {
+    position: fixed;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    padding: 8px 0;
+    min-width: 180px;
+    z-index: 2000;
+    font-family: Arial, sans-serif;
+}
+
+.cv-context-menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cv-context-menu-item:hover {
+    background: #f5f5f5;
+}
+
+.cv-context-menu-item.danger {
+    color: #f44336;
+}
+
+.cv-context-menu-divider {
+    height: 1px;
+    background: #eee;
+    margin: 4px 0;
 }
 
 /* Text selection styling */
