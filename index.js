@@ -36,6 +36,8 @@ const { generateHtmlFromImage } = require('./services/llm');
 const { parsePdfStructure } = require('./services/pdfStructureParser');
 const { analyzeSemantics } = require('./services/semanticAnalyzer');
 const { generateHtmlDocument, generateHtmlFragment, getFieldBindings, PLACEHOLDER_VALUES } = require('./services/htmlGenerator');
+const { convertPdfToHtml, convertPdfBufferToHtml, postProcessConvertedHtml } = require('./services/convertApiService');
+const pdf2htmlExService = require('./services/pdf2htmlExService');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun } = require('docx');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
@@ -1371,6 +1373,233 @@ app.get('/pages/cv-preview', requireAuth, (req, res) => {
 // Страница предпросмотра PDF с оверлеями должна быть доступна публично
 app.get('/pages/pdf-overlay', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'pages', 'pdf-overlay.html'));
+});
+
+// Страница PDF конвертера с редактором цвета
+app.get('/pages/pdf-converter', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'pages', 'pdf-converter.html'));
+});
+
+// ===== ConvertAPI PDF to HTML Conversion =====
+
+// Convert PDF to HTML via ConvertAPI with color editor
+app.post('/api/convert/pdf-to-html', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF файл не загружен' });
+    }
+
+    const pdfPath = req.file.path;
+    console.log('📄 Converting PDF via ConvertAPI:', pdfPath);
+
+    // Convert using ConvertAPI
+    const result = await convertPdfToHtml(pdfPath);
+
+    // Clean up uploaded file
+    try { fs.unlinkSync(pdfPath); } catch (e) { /* ignore */ }
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    // Post-process HTML for color editing
+    const processedHtml = postProcessConvertedHtml(result.html);
+
+    // Save processed HTML to file
+    const outputDir = path.join(__dirname, 'uploads', 'converted');
+    fs.mkdirSync(outputDir, { recursive: true });
+    const outputFileName = `converted-${Date.now()}.html`;
+    const outputPath = path.join(outputDir, outputFileName);
+    fs.writeFileSync(outputPath, processedHtml, 'utf-8');
+
+    console.log('✅ PDF converted and saved:', outputPath);
+
+    res.json({
+      success: true,
+      html: processedHtml,
+      url: `/uploads/converted/${outputFileName}`,
+      metadata: {
+        originalName: req.file.originalname,
+        convertedAt: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    console.error('❌ ConvertAPI conversion error:', err);
+    res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
+  }
+});
+
+// Get raw HTML (without color editor) from ConvertAPI
+app.post('/api/convert/pdf-to-html-raw', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF файл не загружен' });
+    }
+
+    const pdfPath = req.file.path;
+    const result = await convertPdfToHtml(pdfPath);
+
+    // Clean up
+    try { fs.unlinkSync(pdfPath); } catch (e) { /* ignore */ }
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    res.json({
+      success: true,
+      html: result.html,
+      fileName: result.fileName
+    });
+  } catch (err) {
+    console.error('❌ ConvertAPI raw conversion error:', err);
+    res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
+  }
+});
+
+// ===== pdf2htmlEX PDF to HTML Conversion (pixel-perfect) =====
+
+// Check if pdf2htmlEX is available
+app.get('/api/pdf2htmlex/status', async (req, res) => {
+  const status = await pdf2htmlExService.checkPdf2htmlEx();
+  res.json(status);
+});
+
+// Convert PDF to HTML via pdf2htmlEX with color editor
+app.post('/api/pdf2htmlex/convert', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF файл не загружен' });
+    }
+
+    console.log('📄 Converting PDF via pdf2htmlEX:', req.file.path);
+
+    // Check availability first
+    const status = await pdf2htmlExService.checkPdf2htmlEx();
+    if (!status.available) {
+      // Clean up uploaded file
+      try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+      return res.status(500).json({
+        success: false,
+        message: status.error,
+        hint: 'Установите pdf2htmlEX: https://github.com/coolwanglu/pdf2htmlEX или используйте /api/convert/pdf-to-html для ConvertAPI'
+      });
+    }
+
+    // Convert using pdf2htmlEX
+    const options = {
+      zoom: parseFloat(req.body.zoom) || 1.3,
+      embedFont: req.body.embedFont !== 'false',
+      embedImage: req.body.embedImage !== 'false',
+      embedCss: req.body.embedCss !== 'false'
+    };
+
+    const result = await pdf2htmlExService.convertPdfToHtml(req.file.path, options);
+
+    // Clean up uploaded PDF
+    try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    // Post-process HTML for color editing
+    const processedHtml = pdf2htmlExService.postProcessHtml(result.html);
+
+    // Save to output directory
+    const outputDir = path.join(__dirname, 'uploads', 'pdf2html');
+    fs.mkdirSync(outputDir, { recursive: true });
+    const outputFileName = `pdf2html-${Date.now()}.html`;
+    const outputPath = path.join(outputDir, outputFileName);
+    fs.writeFileSync(outputPath, processedHtml, 'utf-8');
+
+    console.log('✅ PDF converted via pdf2htmlEX:', outputPath);
+
+    res.json({
+      success: true,
+      html: processedHtml,
+      url: `/uploads/pdf2html/${outputFileName}`,
+      metadata: {
+        originalName: req.file.originalname,
+        convertedAt: new Date().toISOString(),
+        converter: 'pdf2htmlEX'
+      }
+    });
+  } catch (err) {
+    console.error('❌ pdf2htmlEX conversion error:', err);
+    // Clean up on error
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+    }
+    res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
+  }
+});
+
+// Get raw HTML from pdf2htmlEX (without color editor)
+app.post('/api/pdf2htmlex/convert-raw', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF файл не загружен' });
+    }
+
+    const status = await pdf2htmlExService.checkPdf2htmlEx();
+    if (!status.available) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+      return res.status(500).json({ success: false, message: status.error });
+    }
+
+    const result = await pdf2htmlExService.convertPdfToHtml(req.file.path);
+
+    try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    res.json({
+      success: true,
+      html: result.html
+    });
+  } catch (err) {
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+    }
+    res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
+  }
+});
+
+// PDF to Images (pixel-perfect) via ConvertAPI
+app.post('/api/convert/pdf-to-image', pdfUpload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'PDF файл не загружен' });
+    }
+
+    console.log('🖼️ Converting PDF to images:', req.file.originalname);
+
+    const result = await convertApiService.convertPdfToImages(req.file.path);
+
+    try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    // Generate HTML editor with images
+    const editorHtml = convertApiService.createImageEditor(result.images);
+
+    res.json({
+      success: true,
+      html: editorHtml,
+      pageCount: result.pageCount
+    });
+  } catch (err) {
+    console.error('❌ PDF to image conversion error:', err);
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+    }
+    res.status(500).json({ success: false, message: 'Ошибка конвертации', error: err.message });
+  }
 });
 
 const server = app.listen(PORT, () => {

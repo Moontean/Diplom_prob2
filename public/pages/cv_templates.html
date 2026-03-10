@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Шаблоны резюме — CV Builder</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
+
 <body id="root">
 
   <!-- НАВИГАЦИЯ -->
@@ -16,7 +18,7 @@
           <span class="brand-text">CV Builder</span>
         </div>
       </a>
-      
+
       <div class="nav-menu">
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">
@@ -41,10 +43,10 @@
         <a class="nav-link" href="/pages/pricing">Цены</a>
         <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
       </div>
-      
+
       <div class="nav-actions">
         <a class="btn btn-outline" href="/pages/login">Авторизоваться</a>
-        <a class="btn btn-primary cta" href="/pages/cv-builder">Создать резюме</a>
+        <a class="btn btn-primary cta" href="/pages/pdf-converter">Создать резюме</a>
       </div>
     </div>
   </nav>
@@ -52,53 +54,62 @@
   <!-- ОСНОВНОЙ КОНТЕНТ -->
   <main class="main-content">
     <div class="container" style="padding: 100px 20px; min-height: 80vh;">
-      
+
       <div class="hero-section" style="padding: 4rem 0; text-align: center;">
         <h1 class="hero-title">Шаблоны резюме</h1>
         <p class="hero-description">
-          Выберите профессиональный шаблон резюме из нашей коллекции. 
+          Выберите профессиональный шаблон резюме из нашей коллекции.
           Все шаблоны созданы экспертами по HR и адаптированы под современные требования работодателей.
         </p>
       </div>
-      
+
       <!-- Сетка шаблонов -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin: 3rem 0;">
-        
-        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
-          <div style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+      <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin: 3rem 0;">
+
+        <div
+          style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div
+            style="height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
             Классический шаблон
           </div>
           <h3 style="margin-bottom: 0.5rem; color: #111827;">Классический</h3>
           <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
             Традиционный формат резюме, подходящий для большинства профессий
           </p>
-          <a href="/pages/cv-builder?template=classic" class="btn btn-primary">Использовать шаблон</a>
+          <a href="/pages/pdf-converter?template=classic" class="btn btn-primary">Использовать шаблон</a>
         </div>
-        
-        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
-          <div style="height: 200px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+
+        <div
+          style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div
+            style="height: 200px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
             Современный шаблон
           </div>
           <h3 style="margin-bottom: 0.5rem; color: #111827;">Современный</h3>
           <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
             Стильный дизайн для творческих профессий и стартапов
           </p>
-          <a href="/pages/cv-builder?template=modern" class="btn btn-primary">Использовать шаблон</a>
+          <a href="/pages/pdf-converter?template=modern" class="btn btn-primary">Использовать шаблон</a>
         </div>
-        
-        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
-          <div style="height: 200px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+
+        <div
+          style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div
+            style="height: 200px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
             Минималистичный
           </div>
           <h3 style="margin-bottom: 0.5rem; color: #111827;">Минималистичный</h3>
           <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
             Чистый дизайн с фокусом на контент
           </p>
-          <a href="/pages/cv-builder?template=minimal" class="btn btn-primary">Использовать шаблон</a>
+          <a href="/pages/pdf-converter?template=minimal" class="btn btn-primary">Использовать шаблон</a>
         </div>
-        
-        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
-          <div style="height: 200px; background: linear-gradient(135deg, #5c6ac4 0%, #6371c7 40%, #7885d1 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
+
+        <div
+          style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div
+            style="height: 200px; background: linear-gradient(135deg, #5c6ac4 0%, #6371c7 40%, #7885d1 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600;">
             Европейский стиль
             <span style="font-size: 0.9rem; font-weight: 500; opacity: 0.85;">две колонки, акцент на опыт</span>
           </div>
@@ -106,42 +117,48 @@
           <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
             Узкая левая колонка с профилем и контактами, правая — с опытом и образованием
           </p>
-          <a href="/pages/cv-builder?template=european" class="btn btn-primary">Использовать шаблон</a>
+          <a href="/pages/pdf-converter?template=european" class="btn btn-primary">Использовать шаблон</a>
         </div>
 
-        <div style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
-          <div style="height: 200px; background: linear-gradient(135deg, #5c7cfa 0%, #3652d9 45%, #1f3c88 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600; gap: 0.25rem;">
+        <div
+          style="background: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 1.5rem; text-align: center;">
+          <div
+            style="height: 200px; background: linear-gradient(135deg, #5c7cfa 0%, #3652d9 45%, #1f3c88 100%); border-radius: 0.5rem; margin-bottom: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 600; gap: 0.25rem;">
             Europass формат
-            <span style="font-size: 0.85rem; font-weight: 500; opacity: 0.85;">широкое поле опыта + левая колонка контактов</span>
+            <span style="font-size: 0.85rem; font-weight: 500; opacity: 0.85;">широкое поле опыта + левая колонка
+              контактов</span>
           </div>
           <h3 style="margin-bottom: 0.5rem; color: #111827;">Europass (колонка)</h3>
           <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">
-            Личное фото, профиль, навыки и контакты в левой колонке, а опыт оформлен вертикальной временной линией в правой.
+            Личное фото, профиль, навыки и контакты в левой колонке, а опыт оформлен вертикальной временной линией в
+            правой.
           </p>
-          <a href="/pages/cv-builder?template=europass" class="btn btn-primary">Использовать шаблон</a>
+          <a href="/pages/pdf-converter?template=europass" class="btn btn-primary">Использовать шаблон</a>
         </div>
-        
+
       </div>
 
       <!-- Примеры шаблонов из PDF/DOCX -->
       <section style="margin-top: 3rem;">
-        <h2 style="font-size: 1.5rem; font-weight: 700; color: #111827; text-align: center; margin-bottom: 1rem;">Примеры шаблонов (PDF/DOCX)</h2>
+        <h2 style="font-size: 1.5rem; font-weight: 700; color: #111827; text-align: center; margin-bottom: 1rem;">
+          Примеры шаблонов (PDF/DOCX)</h2>
         <p style="color: #6b7280; text-align: center; max-width: 780px; margin: 0 auto 1.5rem;">
           Ниже — примеры готовых резюме в формате PDF/DOCX из папки проекта. Можно открыть для просмотра,
           а затем выбрать похожий стиль конструктора, чтобы собрать своё резюме.
         </p>
-        <div id="examples-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;"></div>
+        <div id="examples-grid"
+          style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;"></div>
       </section>
-      
+
       <div style="text-align: center; margin-top: 3rem;">
         <p style="color: #6b7280; margin-bottom: 1rem;">
           Не нашли подходящий шаблон?
         </p>
-        <a href="/pages/cv-builder" class="btn btn-outline">Создать резюме с нуля</a>
+        <a href="/pages/pdf-converter" class="btn btn-outline">Создать резюме с нуля</a>
         <span style="margin: 0 1rem; color: #d1d5db;">или</span>
         <a href="/" style="color: #3b82f6; text-decoration: underline;">← Вернуться на главную</a>
       </div>
-      
+
     </div>
   </main>
 
@@ -164,4 +181,5 @@
   <script src="/js/main.js"></script>
   <script src="/js/templates.js"></script>
 </body>
+
 </html>

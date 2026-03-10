@@ -51,55 +51,255 @@
     </script>
 
     <style>
-        /* Панель превью справа (desktop) */
-        @media (min-width: 1024px) {
-            #builder-wrapper {
-                right: 42vw;
-            }
-
-            #live-preview-panel {
-                display: block;
-            }
+        /* Canva-style layout */
+        #builder-wrapper {
+            display: none !important;
         }
 
-        @media (max-width: 1023px) {
-            #builder-wrapper {
-                right: 0;
-            }
-
-            #live-preview-panel {
-                display: none;
-            }
-        }
-
-        #live-preview-panel {
+        /* === Canva Sidebar: Icon Strip (64px) === */
+        #canva-icon-strip {
             position: fixed;
             top: 50px;
-            right: 0;
-            width: 42vw;
-            min-width: 360px;
-            height: calc(100vh - 60px);
-            background: #f8fafc;
-            border-left: 1px solid #e5e7eb;
-            box-shadow: -6px 0 18px rgba(0, 0, 0, 0.06);
-            z-index: 10;
+            left: 0;
+            bottom: 0;
+            width: 64px;
+            background: #252627;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 0;
+            z-index: 20;
+            overflow-y: auto;
+        }
+
+        #canva-icon-strip .strip-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            padding: 10px 4px;
+            margin: 2px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 10px;
+            text-align: center;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        #canva-icon-strip .strip-item:hover {
+            background: #3d3d3f;
+            color: #fff;
+        }
+
+        #canva-icon-strip .strip-item.active {
+            background: #8b5cf6;
+            color: #fff;
+        }
+
+        #canva-icon-strip .strip-item svg {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 4px;
+        }
+
+        /* === Canva Sidebar: Expanded Panel (280px) === */
+        #canva-elements-panel {
+            position: fixed;
+            top: 50px;
+            left: 64px;
+            bottom: 0;
+            width: 280px;
+            background: #fff;
+            border-right: 1px solid #e5e7eb;
+            z-index: 18;
+            overflow-y: auto;
             display: none;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
         }
 
-        /* Force preview panel visible regardless of viewport width */
-        .force-preview #live-preview-panel {
+        #canva-elements-panel.open {
+            display: block;
+        }
+
+        #canva-elements-panel .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        #canva-elements-panel .panel-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            color: #6b7280;
+        }
+
+        #canva-elements-panel .panel-close:hover {
+            background: #f3f4f6;
+        }
+
+        #canva-elements-panel .panel-content {
+            padding: 16px;
+        }
+
+        #canva-elements-panel .panel-section {
+            margin-bottom: 20px;
+        }
+
+        #canva-elements-panel .panel-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        #canva-elements-panel .element-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        #canva-elements-panel .element-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px 8px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 11px;
+            color: #374151;
+            text-align: center;
+        }
+
+        #canva-elements-panel .element-item:hover {
+            background: #ede9fe;
+            border-color: #8b5cf6;
+        }
+
+        #canva-elements-panel .element-item svg {
+            width: 28px;
+            height: 28px;
+            margin-bottom: 6px;
+            color: #6b7280;
+        }
+
+        #canva-elements-panel .element-item:hover svg {
+            color: #8b5cf6;
+        }
+
+        /* Shape preview boxes */
+        .shape-preview {
+            width: 40px;
+            height: 40px;
+            margin-bottom: 6px;
+            border: 2px solid #6b7280;
+        }
+
+        .shape-preview.rect {
+            border-radius: 4px;
+        }
+
+        .shape-preview.circle {
+            border-radius: 50%;
+        }
+
+        .shape-preview.line {
+            height: 3px;
+            width: 40px;
+            border: none;
+            background: #6b7280;
+        }
+
+        .shape-preview.divider {
+            height: 2px;
+            width: 40px;
+            border: none;
+            background: linear-gradient(90deg, transparent, #6b7280, transparent);
+        }
+
+        #canva-elements-panel .element-item:hover .shape-preview {
+            border-color: #8b5cf6;
+            background-color: #ede9fe;
+        }
+
+        /* === Hide old left sidebar === */
+        #left-sidebar {
+            display: none !important;
+        }
+
+        /* === Preview Panel adjusts based on elements panel state === */
+        #live-preview-panel {
             display: block !important;
+            position: fixed;
+            top: 50px;
+            left: 64px;
+            right: 0;
+            bottom: 0;
+            width: auto;
+            height: calc(100vh - 50px);
+            background: #e5e7eb;
+            border-left: 1px solid #d1d5db;
+            box-shadow: none;
+            z-index: 10;
+            transition: left 0.2s ease;
         }
 
-        .force-preview #builder-wrapper {
-            right: 42vw !important;
+        #live-preview-panel.panel-expanded {
+            left: 344px;
+            /* 64px + 280px */
+        }
+
+        #live-preview-panel>div:first-child {
+            background: #f3f4f6 !important;
+            border-bottom: 1px solid #d1d5db !important;
+            color: #374151 !important;
+        }
+
+        #live-preview-panel>div:first-child span {
+            color: #6b7280 !important;
         }
 
         #live-preview-frame {
-            width: 100%;
-            height: 100%;
+            width: 595px;
+            max-width: 90%;
+            height: calc(100% - 60px);
+            background: white;
             border: none;
-            background: #f8fafc;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            margin: 20px auto;
+            display: block;
+        }
+
+        #save-bottom-btn {
+            display: none !important;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            #canva-icon-strip {
+                display: none !important;
+            }
+
+            #canva-elements-panel {
+                display: none !important;
+            }
+
+            #live-preview-panel {
+                left: 0 !important;
+            }
         }
     </style>
 
@@ -299,6 +499,300 @@
                     </span>
                     <span class="sr-only">Генерация сопроводительного письма</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Canva-style Icon Strip (левая узкая полоса) -->
+    <div id="canva-icon-strip">
+        <div class="strip-item active" data-panel="elements" title="Элементы">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            <span>Элементы</span>
+        </div>
+        <div class="strip-item" data-panel="text" title="Текст">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 4v3h5.5v12h3V7H19V4H5z" />
+            </svg>
+            <span>Текст</span>
+        </div>
+        <div class="strip-item" data-panel="shapes" title="Фигуры">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9" />
+            </svg>
+            <span>Фигуры</span>
+        </div>
+        <div class="strip-item" data-panel="images" title="Изображения">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8" cy="8" r="2" />
+                <path d="M21 15l-5-5L5 21" />
+            </svg>
+            <span>Фото</span>
+        </div>
+        <div class="strip-item" data-panel="tables" title="Таблицы">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+            </svg>
+            <span>Таблицы</span>
+        </div>
+        <div class="strip-item" data-panel="uploads" title="Загрузки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="17,8 12,3 7,8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>Загрузки</span>
+        </div>
+    </div>
+
+    <!-- Canva-style Elements Panel (расширяемая панель) -->
+    <div id="canva-elements-panel" class="open">
+        <div class="panel-header">
+            <span id="canva-panel-title">Элементы</span>
+            <button class="panel-close" id="canva-panel-close" title="Закрыть">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Содержимое панели: Элементы -->
+        <div class="panel-content" id="panel-elements">
+            <div class="panel-section">
+                <div class="panel-section-title">Линии и разделители</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="line-solid">
+                        <div class="shape-preview line"></div>
+                        <span>Линия</span>
+                    </div>
+                    <div class="element-item" data-element="divider">
+                        <div class="shape-preview divider"></div>
+                        <span>Разделитель</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div class="panel-section-title">Декоративные</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="icon-star">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                        </svg>
+                        <span>Звезда</span>
+                    </div>
+                    <div class="element-item" data-element="icon-heart">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                        <span>Сердце</span>
+                    </div>
+                    <div class="element-item" data-element="icon-check">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                        </svg>
+                        <span>Галочка</span>
+                    </div>
+                    <div class="element-item" data-element="icon-arrow">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z" />
+                        </svg>
+                        <span>Стрелка</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Содержимое панели: Текст -->
+        <div class="panel-content" id="panel-text" style="display: none;">
+            <div class="panel-section">
+                <div class="panel-section-title">Заголовки</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="heading-h1" style="grid-column: span 2;">
+                        <span style="font-size: 18px; font-weight: bold;">Заголовок H1</span>
+                    </div>
+                    <div class="element-item" data-element="heading-h2" style="grid-column: span 2;">
+                        <span style="font-size: 16px; font-weight: 600;">Заголовок H2</span>
+                    </div>
+                    <div class="element-item" data-element="heading-h3" style="grid-column: span 2;">
+                        <span style="font-size: 14px; font-weight: 500;">Заголовок H3</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div class="panel-section-title">Текстовые блоки</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="paragraph" style="grid-column: span 2;">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M3 5h18v2H3V5zm0 4h18v2H3V9zm0 4h18v2H3v-2zm0 4h12v2H3v-2z" />
+                        </svg>
+                        <span>Параграф</span>
+                    </div>
+                    <div class="element-item" data-element="list-bullet">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="4" cy="7" r="2" />
+                            <path d="M8 6h13v2H8zM8 11h13v2H8zM8 16h13v2H8z" />
+                            <circle cx="4" cy="12" r="2" />
+                            <circle cx="4" cy="17" r="2" />
+                        </svg>
+                        <span>Список</span>
+                    </div>
+                    <div class="element-item" data-element="list-number">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M2 6h2v1H3v1h1v1H2v1h3V5H2v1zm1 9h1v3H2v1h3v-1H3v-1h2v-1H3v-1h2v-1H2v1h1zm-1 7h1v1h1v-1h1v3H2v-1h1v-1H2v-1zm5-15h14v2H7V7zm0 5h14v2H7v-2zm0 5h14v2H7v-2z" />
+                        </svg>
+                        <span>Нумерация</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Содержимое панели: Фигуры -->
+        <div class="panel-content" id="panel-shapes" style="display: none;">
+            <div class="panel-section">
+                <div class="panel-section-title">Основные фигуры</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="shape-rect">
+                        <div class="shape-preview rect"></div>
+                        <span>Прямоугольник</span>
+                    </div>
+                    <div class="element-item" data-element="shape-circle">
+                        <div class="shape-preview circle"></div>
+                        <span>Круг</span>
+                    </div>
+                    <div class="element-item" data-element="shape-rounded">
+                        <div class="shape-preview rect" style="border-radius: 12px;"></div>
+                        <span>Скруглённый</span>
+                    </div>
+                    <div class="element-item" data-element="shape-square">
+                        <div class="shape-preview rect" style="width: 36px; height: 36px;"></div>
+                        <span>Квадрат</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div class="panel-section-title">Специальные</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="shape-triangle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 3L2 21h20L12 3z" />
+                        </svg>
+                        <span>Треугольник</span>
+                    </div>
+                    <div class="element-item" data-element="shape-diamond">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 12l10 10 10-10L12 2z" />
+                        </svg>
+                        <span>Ромб</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Содержимое панели: Изображения -->
+        <div class="panel-content" id="panel-images" style="display: none;">
+            <div class="panel-section">
+                <div class="panel-section-title">Добавить изображение</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="image-upload" style="grid-column: span 2;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            style="width: 32px; height: 32px;">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8" cy="8" r="2" />
+                            <path d="M21 15l-5-5L5 21" />
+                        </svg>
+                        <span>Загрузить изображение</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div class="panel-section-title">Placeholder фото</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="photo-placeholder">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z" />
+                        </svg>
+                        <span>Фото профиля</span>
+                    </div>
+                    <div class="element-item" data-element="logo-placeholder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <path d="M9 9h6v6H9z" />
+                        </svg>
+                        <span>Логотип</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Содержимое панели: Таблицы -->
+        <div class="panel-content" id="panel-tables" style="display: none;">
+            <div class="panel-section">
+                <div class="panel-section-title">Создать таблицу</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="table-2x2">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="1" />
+                            <path d="M3 12h18M12 3v18" />
+                        </svg>
+                        <span>2×2</span>
+                    </div>
+                    <div class="element-item" data-element="table-3x2">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="1" />
+                            <path d="M3 12h18M9 3v18M15 3v18" />
+                        </svg>
+                        <span>3×2</span>
+                    </div>
+                    <div class="element-item" data-element="table-2x3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="1" />
+                            <path d="M3 9h18M3 15h18M12 3v18" />
+                        </svg>
+                        <span>2×3</span>
+                    </div>
+                    <div class="element-item" data-element="table-3x3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="1" />
+                            <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+                        </svg>
+                        <span>3×3</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Содержимое панели: Загрузки -->
+        <div class="panel-content" id="panel-uploads" style="display: none;">
+            <div class="panel-section">
+                <div class="panel-section-title">Загрузить файл</div>
+                <div class="element-grid">
+                    <div class="element-item" data-element="upload-file" style="grid-column: span 2; padding: 24px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            style="width: 40px; height: 40px;">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                            <polyline points="17,8 12,3 7,8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <span style="margin-top: 8px;">Нажмите для загрузки</span>
+                    </div>
+                </div>
+                <input type="file" id="canva-file-upload" accept="image/*,.pdf" style="display: none;">
+            </div>
+            <div class="panel-section" id="uploaded-files-section" style="display: none;">
+                <div class="panel-section-title">Ваши файлы</div>
+                <div class="element-grid" id="uploaded-files-grid">
+                    <!-- Загруженные файлы будут здесь -->
+                </div>
             </div>
         </div>
     </div>
@@ -1176,6 +1670,236 @@
         </svg>
         <span>Сохранить резюме</span>
     </button>
+
+    <!-- Canva Elements Panel JavaScript -->
+    <script>
+        (function () {
+            'use strict';
+
+            // Элементы DOM
+            const iconStrip = document.getElementById('canva-icon-strip');
+            const elementsPanel = document.getElementById('canva-elements-panel');
+            const panelTitle = document.getElementById('canva-panel-title');
+            const panelClose = document.getElementById('canva-panel-close');
+            const previewPanel = document.getElementById('live-preview-panel');
+            const fileUploadInput = document.getElementById('canva-file-upload');
+
+            const panelNames = {
+                'elements': 'Элементы',
+                'text': 'Текст',
+                'shapes': 'Фигуры',
+                'images': 'Изображения',
+                'tables': 'Таблицы',
+                'uploads': 'Загрузки'
+            };
+
+            let currentPanel = 'elements';
+            let uploadedFiles = [];
+
+            // Переключение панелей
+            function switchPanel(panelId) {
+                // Обновить активную иконку
+                iconStrip.querySelectorAll('.strip-item').forEach(item => {
+                    item.classList.toggle('active', item.dataset.panel === panelId);
+                });
+
+                // Скрыть все панели контента
+                elementsPanel.querySelectorAll('.panel-content').forEach(content => {
+                    content.style.display = 'none';
+                });
+
+                // Показать выбранную панель
+                const targetContent = document.getElementById('panel-' + panelId);
+                if (targetContent) {
+                    targetContent.style.display = 'block';
+                }
+
+                // Обновить заголовок
+                panelTitle.textContent = panelNames[panelId] || panelId;
+                currentPanel = panelId;
+
+                // Открыть панель если закрыта
+                openPanel();
+            }
+
+            function openPanel() {
+                elementsPanel.classList.add('open');
+                previewPanel.classList.add('panel-expanded');
+            }
+
+            function closePanel() {
+                elementsPanel.classList.remove('open');
+                previewPanel.classList.remove('panel-expanded');
+                iconStrip.querySelectorAll('.strip-item').forEach(item => item.classList.remove('active'));
+            }
+
+            // Обработчики иконок
+            iconStrip.addEventListener('click', (e) => {
+                const item = e.target.closest('.strip-item');
+                if (!item) return;
+
+                const panelId = item.dataset.panel;
+                if (currentPanel === panelId && elementsPanel.classList.contains('open')) {
+                    closePanel();
+                } else {
+                    switchPanel(panelId);
+                }
+            });
+
+            // Закрытие панели
+            panelClose.addEventListener('click', closePanel);
+
+            // Добавление элементов в iframe
+            function addElementToCanvas(elementType) {
+                const frame = document.getElementById('live-preview-frame');
+                if (!frame || !frame.contentWindow) {
+                    console.warn('Preview frame not available');
+                    return;
+                }
+
+                // Отправить сообщение в iframe для добавления элемента
+                frame.contentWindow.postMessage({
+                    type: 'addElement',
+                    element: elementType
+                }, '*');
+
+                // Показать toast уведомление
+                showToast('Элемент добавлен');
+            }
+
+            // Обработчик кликов на элементы
+            elementsPanel.addEventListener('click', (e) => {
+                const item = e.target.closest('.element-item');
+                if (!item) return;
+
+                const elementType = item.dataset.element;
+                if (!elementType) return;
+
+                // Обработка специальных элементов
+                if (elementType === 'image-upload' || elementType === 'upload-file') {
+                    fileUploadInput.click();
+                    return;
+                }
+
+                addElementToCanvas(elementType);
+            });
+
+            // Обработка загрузки файлов
+            fileUploadInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function (ev) {
+                    const dataUrl = ev.target.result;
+
+                    // Добавить в список загруженных
+                    uploadedFiles.push({
+                        name: file.name,
+                        dataUrl: dataUrl,
+                        type: file.type
+                    });
+
+                    // Обновить UI загрузок
+                    updateUploadedFilesUI();
+
+                    // Если это изображение, добавить сразу на холст
+                    if (file.type.startsWith('image/')) {
+                        addImageToCanvas(dataUrl);
+                    }
+                };
+                reader.readAsDataURL(file);
+
+                // Сбросить input
+                fileUploadInput.value = '';
+            });
+
+            function updateUploadedFilesUI() {
+                const section = document.getElementById('uploaded-files-section');
+                const grid = document.getElementById('uploaded-files-grid');
+
+                if (uploadedFiles.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                section.style.display = 'block';
+                grid.innerHTML = '';
+
+                uploadedFiles.forEach((file, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'element-item';
+                    item.dataset.uploadIndex = index;
+
+                    if (file.type.startsWith('image/')) {
+                        item.innerHTML = `
+                        <img src="${file.dataUrl}" alt="${file.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
+                        <span style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${file.name}</span>
+                    `;
+                    } else {
+                        item.innerHTML = `
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                        <span style="font-size: 10px;">${file.name}</span>
+                    `;
+                    }
+
+                    item.addEventListener('click', () => {
+                        if (file.type.startsWith('image/')) {
+                            addImageToCanvas(file.dataUrl);
+                        }
+                    });
+
+                    grid.appendChild(item);
+                });
+            }
+
+            function addImageToCanvas(dataUrl) {
+                const frame = document.getElementById('live-preview-frame');
+                if (!frame || !frame.contentWindow) return;
+
+                frame.contentWindow.postMessage({
+                    type: 'addImage',
+                    imageData: dataUrl
+                }, '*');
+
+                showToast('Изображение добавлено');
+            }
+
+            function showToast(message) {
+                // Создать toast если не существует
+                let toast = document.getElementById('canva-toast');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.id = 'canva-toast';
+                    toast.style.cssText = `
+                    position: fixed;
+                    bottom: 80px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: #1f2937;
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    z-index: 1000;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                `;
+                    document.body.appendChild(toast);
+                }
+
+                toast.textContent = message;
+                toast.style.opacity = '1';
+
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                }, 2000);
+            }
+
+            // Инициализация: показать панель элементов по умолчанию
+            switchPanel('elements');
+        })();
+    </script>
 
     <script src="/js/cv-builder.js"></script>
 </body>

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Цены — CV Builder</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
+
 <body id="root">
 
   <!-- НАВИГАЦИЯ -->
@@ -16,7 +18,7 @@
           <span class="brand-text">CV Builder</span>
         </div>
       </a>
-      
+
       <div class="nav-menu">
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">
@@ -41,10 +43,10 @@
         <a class="nav-link" href="/pages/pricing">Цены</a>
         <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
       </div>
-      
+
       <div class="nav-actions">
         <a class="btn btn-outline" href="/pages/login">Авторизоваться</a>
-        <a class="btn btn-primary cta" href="/pages/cv-builder">Создать резюме</a>
+        <a class="btn btn-primary cta" href="/pages/pdf-converter">Создать резюме</a>
       </div>
     </div>
   </nav>
@@ -52,24 +54,26 @@
   <!-- ОСНОВНОЙ КОНТЕНТ -->
   <main class="main-content">
     <div class="container" style="padding: 100px 20px; min-height: 80vh;">
-      
+
       <div class="hero-section" style="padding: 4rem 0; text-align: center;">
         <h1 class="hero-title">Тарифные планы</h1>
         <p class="hero-description">
           Выберите подходящий план для создания профессиональных резюме
         </p>
       </div>
-      
+
       <!-- Pricing Cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; max-width: 1000px; margin: 0 auto;">
-        
+      <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; max-width: 1000px; margin: 0 auto;">
+
         <!-- Бесплатный план -->
-        <div style="background: white; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 2rem; text-align: center; position: relative;">
+        <div
+          style="background: white; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 2rem; text-align: center; position: relative;">
           <h3 style="font-size: 1.5rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;">Бесплатно</h3>
           <div style="font-size: 2.5rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">
             0₽ <span style="font-size: 1rem; font-weight: 400; color: #6b7280;">/месяц</span>
           </div>
-          
+
           <ul style="text-align: left; margin: 1.5rem 0; list-style: none; padding: 0;">
             <li style="padding: 0.5rem 0; color: #374151; display: flex; align-items: center;">
               <span style="color: #10b981; margin-right: 0.5rem;">✓</span>
@@ -88,23 +92,25 @@
               Сопроводительные письма
             </li>
           </ul>
-          
+
           <button class="btn btn-outline" style="width: 100%;">
             Начать бесплатно
           </button>
         </div>
-        
+
         <!-- Базовый план -->
-        <div style="background: white; border: 2px solid #3b82f6; border-radius: 0.75rem; padding: 2rem; text-align: center; position: relative; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.25);">
-          <div style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 600;">
+        <div
+          style="background: white; border: 2px solid #3b82f6; border-radius: 0.75rem; padding: 2rem; text-align: center; position: relative; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.25);">
+          <div
+            style="position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; font-size: 0.875rem; font-weight: 600;">
             Популярный
           </div>
-          
+
           <h3 style="font-size: 1.5rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;">Базовый</h3>
           <div style="font-size: 2.5rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">
             299₽ <span style="font-size: 1rem; font-weight: 400; color: #6b7280;">/месяц</span>
           </div>
-          
+
           <ul style="text-align: left; margin: 1.5rem 0; list-style: none; padding: 0;">
             <li style="padding: 0.5rem 0; color: #374151; display: flex; align-items: center;">
               <span style="color: #10b981; margin-right: 0.5rem;">✓</span>
@@ -127,19 +133,20 @@
               Поддержка по email
             </li>
           </ul>
-          
+
           <button class="btn btn-primary" style="width: 100%;" data-plan="basic">
             Выбрать план
           </button>
         </div>
-        
+
         <!-- Премиум план -->
-        <div style="background: white; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 2rem; text-align: center; position: relative;">
+        <div
+          style="background: white; border: 2px solid #e5e7eb; border-radius: 0.75rem; padding: 2rem; text-align: center; position: relative;">
           <h3 style="font-size: 1.5rem; font-weight: 600; color: #111827; margin-bottom: 0.5rem;">Премиум</h3>
           <div style="font-size: 2.5rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">
             599₽ <span style="font-size: 1rem; font-weight: 400; color: #6b7280;">/месяц</span>
           </div>
-          
+
           <ul style="text-align: left; margin: 1.5rem 0; list-style: none; padding: 0;">
             <li style="padding: 0.5rem 0; color: #374151; display: flex; align-items: center;">
               <span style="color: #10b981; margin-right: 0.5rem;">✓</span>
@@ -166,14 +173,14 @@
               Личный консультант
             </li>
           </ul>
-          
+
           <button class="btn btn-outline" style="width: 100%;" data-plan="premium">
             Выбрать план
           </button>
         </div>
-        
+
       </div>
-      
+
       <div style="text-align: center; margin-top: 4rem; padding: 2rem; background: #f8fafc; border-radius: 0.75rem;">
         <h3 style="color: #111827; margin-bottom: 1rem;">Часто задаваемые вопросы</h3>
         <p style="color: #6b7280; margin-bottom: 1.5rem;">
@@ -184,7 +191,7 @@
           <a href="/" class="btn btn-primary">← Вернуться на главную</a>
         </div>
       </div>
-      
+
     </div>
   </main>
 
@@ -206,7 +213,7 @@
 
   <script src="/js/main.js"></script>
   <script>
-    (function(){
+    (function () {
       const btns = document.querySelectorAll('[data-plan]');
       btns.forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -237,4 +244,5 @@
     })();
   </script>
 </body>
+
 </html>

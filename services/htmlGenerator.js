@@ -41,6 +41,9 @@ const PLACEHOLDER_VALUES = CV_FIELD_TYPES
         return acc;
     }, {});
 
+// Color palette & CSS variable generator
+const { buildColorVariables, getColorVar } = require('./cssGenerator');
+
 /**
  * Generate complete HTML document from parsed structure and semantics
  * @param {Object} parsedStructure - From pdfStructureParser
@@ -59,12 +62,17 @@ function generateHtmlDocument(parsedStructure, semanticAnalysis, options = {}) {
     const pages = parsedStructure.pages || [];
     const fieldMappings = semanticAnalysis?.fieldMappings || {};
 
-    let css = generateCss(parsedStructure, options);
+    // Build color palette and CSS variables once per document
+    const { colorToVar, cssVariables } = buildColorVariables(parsedStructure);
+
+    // Generate global CSS, injecting :root { --color-X: ... } block
+    let css = generateCss(parsedStructure, { ...options, cssVariables });
     let htmlPages = pages.map((page, pageIndex) =>
         generatePageHtml(page, pageIndex, fieldMappings, {
             usePlaceholders,
             includeDataAttributes,
-            userData
+            userData,
+            colorToVar
         })
     ).join('\n');
 
@@ -627,13 +635,15 @@ function generateHtmlDocument(parsedStructure, semanticAnalysis, options = {}) {
  * Generate CSS for the document
  */
 function generateCss(parsedStructure, options = {}) {
-    const { scale = 1 } = options;
+    const { scale = 1, cssVariables = '' } = options;
     const page = parsedStructure.pages?.[0];
     const width = page?.width || 612;
     const height = page?.height || 792;
 
-    return `
-/* CV Template Styles - Generated */
+    // Optional :root block with CSS variables (colors from PDF)
+    const varsBlock = cssVariables ? `${cssVariables}\n\n` : '';
+
+    return `${varsBlock}/* CV Template Styles - Generated */
 * {
     margin: 0;
     padding: 0;
@@ -721,7 +731,8 @@ body {
     text-transform: uppercase;
 }
 
-/* Empty field indicator - shows hint when no user data */
+/* Empty field indicator - shows hint when no user data.
+ * Важно: не красим фон, чтобы не было жёлтых подсветок на реальном шаблоне. */
 [data-needs-data="true"]:empty::before {
     content: attr(data-field);
     color: #999;
@@ -729,16 +740,14 @@ body {
     opacity: 0.7;
 }
 
-/* Highlight fields that need data */
+/* Поля без данных больше НЕ имеют жёлтого фона. */
 [data-needs-data="true"] {
-    background: rgba(255, 235, 59, 0.15);
-    border-radius: 2px;
-    min-width: 50px;
-    min-height: 1em;
+    background: transparent;
+    border-radius: 0;
 }
 
 [data-needs-data="true"]:hover {
-    background: rgba(255, 235, 59, 0.3);
+    background: transparent;
 }
 
 /* Editable mode */
@@ -751,13 +760,13 @@ body {
 
 /* ========== CANVA-LIKE EDITOR STYLES ========== */
 
-/* Hover effect - yellow outline on any editable element */
+/* Hover effect - аккуратная синяя рамка на editable элементах (без жёлтого) */
 .editable-field:hover,
 .cv-block:hover,
 .cv-line:hover,
 .cv-section:hover,
 .cv-background:hover {
-    outline: 2px solid #FFD700;
+    outline: 2px solid #2196F3;
     outline-offset: 2px;
     cursor: pointer;
     z-index: 10;
@@ -941,7 +950,7 @@ body {
  * Generate HTML for a single page
  */
 function generatePageHtml(page, pageIndex, fieldMappings, options) {
-    const { usePlaceholders, includeDataAttributes, userData } = options;
+    const { usePlaceholders, includeDataAttributes, userData, colorToVar } = options;
     const textLines = page.lines || []; // Text lines
     const blocks = page.blocks || [];
     const backgrounds = page.backgrounds || []; // EXACT rectangles from PDF
@@ -952,8 +961,27 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
     let backgroundsHtml = '';
     if (backgrounds.length > 0) {
         console.log(`📐 Page ${pageIndex + 1}: Using ${backgrounds.length} exact backgrounds from PDF`);
-        backgroundsHtml = backgrounds.map((bg, idx) => {
-            return `        <div class="cv-background" data-bg-id="${bg.id}" style="position: absolute; left: ${bg.bbox.x}px; top: ${bg.bbox.y}px; width: ${bg.bbox.width}px; height: ${bg.bbox.height}px; background-color: ${bg.color}; z-index: 0; pointer-events: none;"></div>`;
+        backgroundsHtml = backgrounds.map((bg) => {
+            const styleParts = [
+                'position: absolute',
+                `left: ${bg.bbox.x}px`,
+                `top: ${bg.bbox.y}px`,
+                `width: ${bg.bbox.width}px`,
+                `height: ${bg.bbox.height}px`,
+                'z-index: 0',
+                'pointer-events: none'
+            ];
+
+            if (bg.color) {
+                const varName = getColorVar(colorToVar, bg.color);
+                if (varName) {
+                    styleParts.push(`background-color: var(${varName})`);
+                } else {
+                    styleParts.push(`background-color: ${bg.color}`);
+                }
+            }
+
+            return `        <div class="cv-background" data-bg-id="${bg.id}" style="${styleParts.join('; ')}"></div>`;
         }).join('\n');
     }
 
@@ -961,7 +989,7 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
     let sectionsHtml = '';
     if (backgroundsHtml === '' && colorSections.length > 0) {
         console.log(`🤖 Page ${pageIndex + 1}: Using ${colorSections.length} AI-detected sections (fallback)`);
-        sectionsHtml = colorSections.map((section, idx) => {
+        sectionsHtml = colorSections.map((section) => {
             if (!section.bbox) return '';
 
             const sectionStyles = [
@@ -970,10 +998,17 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
                 `top: ${section.bbox.y}px`,
                 `width: ${section.bbox.width}px`,
                 `height: ${section.bbox.height}px`,
-                `background-color: ${section.backgroundColor || '#FFFFFF'}`,
                 'z-index: 0',
                 'pointer-events: none'
-            ].join('; ');
+            ];
+
+            const bgColor = section.backgroundColor || '#FFFFFF';
+            const varName = getColorVar(colorToVar, bgColor);
+            if (varName) {
+                sectionStyles.push(`background-color: var(${varName})`);
+            } else {
+                sectionStyles.push(`background-color: ${bgColor}`);
+            }
 
             return `        <div class="cv-section" data-section-id="${section.id}" data-section-name="${section.name || 'unnamed'}" style="${sectionStyles}"></div>`;
         }).filter(html => html).join('\n');
@@ -984,18 +1019,27 @@ function generatePageHtml(page, pageIndex, fieldMappings, options) {
     const pdfLines = page.pdfLines || []; // From extractBackgrounds
     if (pdfLines.length > 0) {
         console.log(`📏 Page ${pageIndex + 1}: Rendering ${pdfLines.length} separator lines`);
-        linesHtml = pdfLines.map((line, idx) => {
+        linesHtml = pdfLines.map((line) => {
             const lineStyle = [
                 'position: absolute',
                 `left: ${line.bbox.x}px`,
                 `top: ${line.bbox.y}px`,
                 `width: ${line.bbox.width}px`,
                 `height: ${Math.max(line.bbox.height, line.width || 1)}px`,
-                `background-color: ${line.color}`,
                 'z-index: 1',
                 'pointer-events: none'
-            ].join('; ');
-            return `        <div class="cv-separator-line" data-line-id="${line.id}" style="${lineStyle}"></div>`;
+            ];
+
+            if (line.color) {
+                const varName = getColorVar(colorToVar, line.color);
+                if (varName) {
+                    lineStyle.push(`background-color: var(${varName})`);
+                } else {
+                    lineStyle.push(`background-color: ${line.color}`);
+                }
+            }
+
+            return `        <div class="cv-separator-line" data-line-id="${line.id}" style="${lineStyle.join('; ')}"></div>`;
         }).join('\n');
     }
 
@@ -1054,7 +1098,8 @@ function generateElementHtml(element, options) {
         includeDataAttributes,
         userData,
         pageIndex,
-        pageWidth
+        pageWidth,
+        colorToVar
     } = options;
 
     const bbox = element.bbox;
@@ -1074,7 +1119,7 @@ function generateElementHtml(element, options) {
     // Build style - use AI-determined textColor if available, otherwise font color
     // NOTE: backgroundColor is now handled by section divs, not individual blocks
     const textColor = element.textColor || font.color || null;
-    const style = buildElementStyle(bbox, font, true, null, null, textColor, pageWidth);
+    const style = buildElementStyle(bbox, font, true, null, null, textColor, pageWidth, colorToVar);
 
     // Build data attributes for binding
     let dataAttrs = '';
@@ -1102,7 +1147,7 @@ function generateElementHtml(element, options) {
 /**
  * Build inline style for element positioning
  */
-function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor = null, backgroundImage = null, textColor = null, pageWidth = 612) {
+function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor = null, backgroundImage = null, textColor = null, pageWidth = 612, colorToVar = null) {
     const styles = [];
 
     // Position (PDF coordinates: origin at bottom-left, HTML: top-left)
@@ -1130,8 +1175,13 @@ function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor 
         styles.push('background-size: 100% 100%');
         styles.push('background-repeat: no-repeat');
     } else if (backgroundColor && backgroundColor !== '#ffffff' && backgroundColor !== '#FFFFFF') {
-        // Use solid background color
-        styles.push(`background-color: ${backgroundColor}`);
+        // Use solid background color (prefer CSS variable if available)
+        const varName = getColorVar(colorToVar, backgroundColor);
+        if (varName) {
+            styles.push(`background-color: var(${varName})`);
+        } else {
+            styles.push(`background-color: ${backgroundColor}`);
+        }
     }
 
     // Font styling
@@ -1152,12 +1202,20 @@ function buildElementStyle(bbox, font, shouldBeVisible = false, backgroundColor 
 
     // Text color: priority is textColor (AI) > font.color > default
     if (shouldBeVisible) {
+        let effectiveColor = null;
         if (textColor && textColor !== 'transparent') {
-            styles.push(`color: ${textColor}`);
+            effectiveColor = textColor;
         } else if (font?.color && font.color !== 'transparent') {
-            styles.push(`color: ${font.color}`);
+            effectiveColor = font.color;
         } else {
-            styles.push('color: #000000'); // Default visible color
+            effectiveColor = '#000000'; // Default visible color
+        }
+
+        const varName = getColorVar(colorToVar, effectiveColor);
+        if (varName) {
+            styles.push(`color: var(${varName})`);
+        } else {
+            styles.push(`color: ${effectiveColor}`);
         }
     } else {
         styles.push('color: transparent'); // Transparent for selection only
@@ -1218,7 +1276,8 @@ function escapeHtml(text) {
  * Generate standalone CSS file content
  */
 function generateCssFile(parsedStructure, options = {}) {
-    return generateCss(parsedStructure, options);
+    const { cssVariables } = buildColorVariables(parsedStructure);
+    return generateCss(parsedStructure, { ...options, cssVariables });
 }
 
 /**
@@ -1234,11 +1293,15 @@ function generateHtmlFragment(parsedStructure, semanticAnalysis, options = {}) {
         userData = null
     } = options;
 
+    // Reuse same color palette for HTML fragment
+    const { colorToVar } = buildColorVariables(parsedStructure);
+
     return pages.map((page, pageIndex) =>
         generatePageHtml(page, pageIndex, fieldMappings, {
             usePlaceholders,
             includeDataAttributes,
-            userData
+            userData,
+            colorToVar
         })
     ).join('\n');
 }

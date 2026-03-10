@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF → HTML Конвертер с редактором цвета</title>
+    <link rel="stylesheet" href="/css/tailwind.css">
+    <style>
+        :root {
+            --primary: #2196F3;
+            --primary-dark: #1976D2;
+            --success: #4CAF50;
+            --danger: #f44336;
+            --bg-light: #f5f7fa;
+            --text-dark: #333;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-light);
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            max-width: 800px;
+            margin: 3rem auto;
+            padding: 0 1rem;
+        }
+
+        .upload-container {
+            background: white;
+            border-radius: 16px;
+            padding: 3rem;
+            text-align: center;
+            box-shadow: var(--shadow);
+            border: 3px dashed #ddd;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-container:hover,
+        .upload-container.dragover {
+            border-color: var(--primary);
+            background: #f8fbff;
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .upload-title {
+            font-size: 1.5rem;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-subtitle {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        .upload-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .upload-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .blank-btn {
+            margin-top: 1rem;
+            background: #10b981;
+        }
+
+        .blank-btn:hover {
+            background: #059669;
+        }
+
+        .upload-input {
+            display: none;
+        }
+
+        /* Features Grid */
+        .features {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-desc {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Loading State */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #e0e0e0;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            margin-top: 1.5rem;
+            font-size: 1.2rem;
+            color: var(--text-dark);
+        }
+
+        .loading-subtext {
+            margin-top: 0.5rem;
+            color: #666;
+        }
+
+        /* Result View */
+        .result-view {
+            display: none;
+        }
+
+        .result-view.active {
+            display: block;
+        }
+
+        .result-header {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-primary.active {
+            background: var(--success);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e8e8e8;
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #43a047;
+        }
+
+        .result-iframe-container {
+            width: 100%;
+            height: calc(100vh - 70px);
+            overflow: auto;
+            background: #e0e0e0;
+        }
+
+        .result-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+
+        /* Canva-like elements panel */
+        .elements-panel {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            bottom: 0;
+            width: 260px;
+            background: #111827;
+            color: #f9fafb;
+            box-shadow: 4px 0 16px rgba(15, 23, 42, 0.45);
+            transform: translateX(-100%);
+            transition: transform 0.25s ease;
+            z-index: 150;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .elements-panel.open {
+            transform: translateX(0);
+        }
+
+        .elements-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .elements-panel-section {
+            margin-bottom: 1.25rem;
+        }
+
+        .elements-panel-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #9ca3af;
+            margin-bottom: 0.5rem;
+        }
+
+        .element-btn {
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            border: none;
+            background: rgba(31, 41, 55, 0.9);
+            color: #e5e7eb;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.35rem;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        .element-btn:hover {
+            background: rgba(55, 65, 81, 1);
+            transform: translateY(-1px);
+        }
+
+        .element-btn span {
+            font-size: 1rem;
+        }
+
+        /* Error State */
+        .error-container {
+            max-width: 500px;
+            margin: 3rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .error-title {
+            font-size: 1.3rem;
+            color: var(--danger);
+            margin-bottom: 0.5rem;
+        }
+
+        .error-message {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+
+            .upload-container {
+                padding: 2rem 1rem;
+            }
+
+            .result-header {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+
+            .result-actions {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Upload View -->
+    <div id="upload-view">
+        <header class="header">
+            <h1>📄 PDF → HTML Конвертер</h1>
+            <div class="header-actions">
+                <a href="/" class="btn btn-secondary">← На главную</a>
+            </div>
+        </header>
+
+        <div class="upload-zone">
+            <div class="upload-container" id="upload-container">
+                <div class="upload-icon">📤</div>
+                <h2 class="upload-title">Загрузите PDF файл</h2>
+                <p class="upload-subtitle">
+                    Перетащите файл сюда или нажмите для выбора
+                </p>
+
+                <!-- Converter Selection -->
+                <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #333;">
+                        🔧 Метод конвертации:
+                    </label>
+                    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem 1rem; border: 2px solid #ddd; border-radius: 8px; background: white;">
+                            <input type="radio" name="converter" value="pdf2htmlex" id="converter-pdf2htmlex">
+                            <span>📐 pdf2htmlEX</span>
+                            <small style="color: #666;">(точный)</small>
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem 1rem; border: 2px solid #ddd; border-radius: 8px; background: white;">
+                            <input type="radio" name="converter" value="convertapi" id="converter-convertapi">
+                            <span>☁️ ConvertAPI</span>
+                            <small style="color: #666;">(облачный)</small>
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem 1rem; border: 2px solid #667eea; border-radius: 8px; background: #f0f4ff;">
+                            <input type="radio" name="converter" value="image" id="converter-image" checked>
+                            <span>🖼️ Изображение</span>
+                            <small style="color: #667eea;">(pixel-perfect)</small>
+                        </label>
+                    </div>
+                    <p id="converter-status" style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;"></p>
+                </div>
+
+                <button class="upload-btn" id="upload-btn">
+                    📁 Выбрать PDF файл
+                </button>
+                <input type="file" class="upload-input" id="pdf-input" accept="application/pdf">
+
+                <button class="upload-btn blank-btn" id="blank-btn" type="button">
+                    📝 Начать с чистого листа
+                </button>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">🎨</div>
+                <h3 class="feature-title">Редактор цвета</h3>
+                <p class="feature-desc">
+                    Кликайте на любой элемент и меняйте цвет фона или текста в реальном времени
+                </p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3 class="feature-title">Безопасные изменения</h3>
+                <p class="feature-desc">
+                    Текст автоматически адаптируется для читаемости при смене фона
+                </p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">↩️</div>
+                <h3 class="feature-title">Отмена действий</h3>
+                <p class="feature-desc">
+                    Ctrl+Z для отмены и Ctrl+Y для повтора любых изменений
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Конвертация PDF...</div>
+        <div class="loading-subtext">Это может занять несколько секунд</div>
+    </div>
+
+    <!-- Result View -->
+    <div class="result-view" id="result-view">
+        <header class="result-header">
+            <h1 style="margin: 0; font-size: 1.2rem;">📄 Результат конвертации</h1>
+            <div class="result-actions">
+                <button class="btn btn-secondary" id="elements-panel-toggle">
+                    🧱 Элементы
+                </button>
+                <button class="btn btn-primary" id="toggle-edit-btn">
+                    🎨 Режим редактирования
+                </button>
+                <button class="btn btn-secondary" id="undo-btn" disabled>
+                    ↩️ Отменить
+                </button>
+                <button class="btn btn-secondary" id="redo-btn" disabled>
+                    ↪️ Повторить
+                </button>
+                <button class="btn btn-success" id="download-btn">
+                    💾 Скачать HTML
+                </button>
+                <button class="btn btn-secondary" id="new-file-btn">
+                    📤 Новый файл
+                </button>
+            </div>
+        </header>
+        <div class="result-iframe-container">
+            <iframe class="result-iframe" id="result-iframe"></iframe>
+        </div>
+    </div>
+
+    <!-- Elements side panel (Canva-style) -->
+    <div class="elements-panel" id="elements-panel">
+        <div class="elements-panel-header">
+            <span>Элементы</span>
+        </div>
+
+        <div class="elements-panel-section">
+            <div class="elements-panel-title">Текст</div>
+            <button class="element-btn" id="add-heading">
+                <span>🅷</span>
+                <span>Заголовок</span>
+            </button>
+            <button class="element-btn" id="add-subheading">
+                <span>🅷</span>
+                <span>Подзаголовок</span>
+            </button>
+            <button class="element-btn" id="add-paragraph">
+                <span>🅿</span>
+                <span>Текстовый блок</span>
+            </button>
+        </div>
+
+        <div class="elements-panel-section">
+            <div class="elements-panel-title">Списки</div>
+            <button class="element-btn" id="add-bulleted-list">
+                <span>•</span>
+                <span>Маркированный список</span>
+            </button>
+        </div>
+
+        <div class="elements-panel-section">
+            <div class="elements-panel-title">Графика</div>
+            <button class="element-btn" id="add-highlight-box">
+                <span>▢</span>
+                <span>Цветной блок</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Error Container -->
+    <div class="error-container hidden" id="error-container">
+        <div class="error-icon">❌</div>
+        <h3 class="error-title">Ошибка конвертации</h3>
+        <p class="error-message" id="error-message"></p>
+        <button class="btn btn-primary" id="retry-btn">🔄 Попробовать снова</button>
+    </div>
+
+    <script>
+        /**
+         * PDF to HTML Converter with Color Editor
+         */
+        (function () {
+            'use strict';
+
+            // DOM Elements
+            const uploadView = document.getElementById('upload-view');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const resultView = document.getElementById('result-view');
+            const errorContainer = document.getElementById('error-container');
+            const errorMessage = document.getElementById('error-message');
+
+            const uploadContainer = document.getElementById('upload-container');
+            const uploadBtn = document.getElementById('upload-btn');
+            const pdfInput = document.getElementById('pdf-input');
+            const blankBtn = document.getElementById('blank-btn');
+
+            const resultIframe = document.getElementById('result-iframe');
+            const toggleEditBtn = document.getElementById('toggle-edit-btn');
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+            const downloadBtn = document.getElementById('download-btn');
+            const newFileBtn = document.getElementById('new-file-btn');
+            const retryBtn = document.getElementById('retry-btn');
+            const elementsPanel = document.getElementById('elements-panel');
+            const elementsPanelToggle = document.getElementById('elements-panel-toggle');
+
+            const addHeadingBtn = document.getElementById('add-heading');
+            const addSubheadingBtn = document.getElementById('add-subheading');
+            const addParagraphBtn = document.getElementById('add-paragraph');
+            const addBulletedListBtn = document.getElementById('add-bulleted-list');
+            const addHighlightBoxBtn = document.getElementById('add-highlight-box');
+
+            // State
+            let currentHtmlUrl = null;
+            let isEditMode = false;
+
+            // Event Listeners
+            uploadBtn.addEventListener('click', () => pdfInput.click());
+            pdfInput.addEventListener('change', handleFileSelect);
+            retryBtn.addEventListener('click', resetToUpload);
+            newFileBtn.addEventListener('click', resetToUpload);
+
+            if (blankBtn) {
+                blankBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    createBlankDocument();
+                });
+            }
+
+            if (elementsPanelToggle && elementsPanel) {
+                elementsPanelToggle.addEventListener('click', () => {
+                    elementsPanel.classList.toggle('open');
+                });
+            }
+
+            function sendInsertElement(elementType) {
+                if (!resultIframe || !resultIframe.contentWindow) return;
+                resultIframe.contentWindow.postMessage({
+                    type: 'insert-element',
+                    elementType
+                }, '*');
+            }
+
+            if (addHeadingBtn) {
+                addHeadingBtn.addEventListener('click', () => sendInsertElement('heading'));
+            }
+            if (addSubheadingBtn) {
+                addSubheadingBtn.addEventListener('click', () => sendInsertElement('subheading'));
+            }
+            if (addParagraphBtn) {
+                addParagraphBtn.addEventListener('click', () => sendInsertElement('paragraph'));
+            }
+            if (addBulletedListBtn) {
+                addBulletedListBtn.addEventListener('click', () => sendInsertElement('bulleted-list'));
+            }
+            if (addHighlightBoxBtn) {
+                addHighlightBoxBtn.addEventListener('click', () => sendInsertElement('highlight-box'));
+            }
+
+            // Drag and drop
+            uploadContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadContainer.classList.add('dragover');
+            });
+
+            uploadContainer.addEventListener('dragleave', () => {
+                uploadContainer.classList.remove('dragover');
+            });
+
+            uploadContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadContainer.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    handleFile(files[0]);
+                } else {
+                    showError('Пожалуйста, выберите PDF файл');
+                }
+            });
+
+            // Edit mode controls
+            toggleEditBtn.addEventListener('click', () => {
+                isEditMode = !isEditMode;
+                toggleEditBtn.classList.toggle('active', isEditMode);
+                toggleEditBtn.textContent = isEditMode ? '✅ Режим редактирования' : '🎨 Режим редактирования';
+
+                // Send message to iframe
+                resultIframe.contentWindow.postMessage({
+                    type: 'toggle-edit-mode',
+                    enabled: isEditMode
+                }, '*');
+            });
+
+            undoBtn.addEventListener('click', () => {
+                resultIframe.contentWindow.postMessage({ type: 'undo' }, '*');
+            });
+
+            redoBtn.addEventListener('click', () => {
+                resultIframe.contentWindow.postMessage({ type: 'redo' }, '*');
+            });
+
+            downloadBtn.addEventListener('click', () => {
+                resultIframe.contentWindow.postMessage({ type: 'download' }, '*');
+            });
+
+            // Listen for messages from iframe
+            window.addEventListener('message', (e) => {
+                const msg = e.data;
+                if (!msg || !msg.type) return;
+
+                switch (msg.type) {
+                    case 'history-update':
+                        undoBtn.disabled = !msg.canUndo;
+                        redoBtn.disabled = !msg.canRedo;
+                        break;
+                    case 'download-ready':
+                        downloadHtml(msg.html, msg.fileName);
+                        break;
+                }
+            });
+
+            /**
+             * Handle file selection
+             */
+            function handleFileSelect(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.type !== 'application/pdf') {
+                        showError('Пожалуйста, выберите PDF файл');
+                        return;
+                    }
+                    handleFile(file);
+                }
+            }
+
+            /**
+             * Handle file upload and conversion
+             */
+            async function handleFile(file) {
+                showLoading();
+
+                try {
+                    const formData = new FormData();
+                    formData.append('pdf', file);
+
+                    // Get selected converter
+                    const converter = document.querySelector('input[name="converter"]:checked').value;
+                    let endpoint = '/api/convert/pdf-to-html';
+
+                    if (converter === 'pdf2htmlex') {
+                        endpoint = '/api/pdf2htmlex/convert';
+                    } else if (converter === 'image') {
+                        endpoint = '/api/convert/pdf-to-image';
+                    }
+
+                    console.log('Using converter:', converter, 'endpoint:', endpoint);
+
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.message || result.hint || 'Ошибка конвертации');
+                    }
+
+                    // Show result
+                    showResult(result.url || result.html);
+
+                } catch (error) {
+                    console.error('Conversion error:', error);
+                    showError(error.message || 'Не удалось сконвертировать PDF');
+                }
+            }
+
+            /**
+             * Check pdf2htmlEX availability on page load
+             */
+            async function checkPdf2htmlExStatus() {
+                const statusEl = document.getElementById('converter-status');
+                try {
+                    const response = await fetch('/api/pdf2htmlex/status');
+                    const result = await response.json();
+
+                    if (result.available) {
+                        statusEl.innerHTML = '✅ pdf2htmlEX доступен - рекомендуется для точной конвертации';
+                        statusEl.style.color = '#4CAF50';
+                    } else {
+                        statusEl.innerHTML = '⚠️ pdf2htmlEX не установлен. Используйте ConvertAPI или <a href="https://github.com/coolwanglu/pdf2htmlEX" target="_blank">установите pdf2htmlEX</a>';
+                        statusEl.style.color = '#ff9800';
+                        // Switch to ConvertAPI
+                        document.getElementById('converter-convertapi').checked = true;
+                    }
+                } catch (err) {
+                    statusEl.innerHTML = '⚠️ Не удалось проверить pdf2htmlEX';
+                    statusEl.style.color = '#ff9800';
+                }
+            }
+
+            // Check status on load
+            checkPdf2htmlExStatus();
+
+            /**
+             * Create blank editable document (start from scratch)
+             */
+            function createBlankDocument() {
+                const blankHtml = getBlankDocumentHtml();
+                showResult(blankHtml);
+            }
+
+            /**
+             * Returns HTML for a simple blank resume page
+             * with full color editing support like converted PDFs
+             */
+            function getBlankDocumentHtml() {
+                return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Чистый лист — Резюме</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #e5e7eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .page-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 24px 8px;
+            padding-top: 70px;
+        }
+
+        .page {
+            width: 794px;
+            min-height: 1123px;
+            background: #ffffff;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+            border-radius: 8px;
+            padding: 40px 48px;
+            box-sizing: border-box;
+            color: #111827;
+            line-height: 1.5;
+            outline: none;
+        }
+
+        h1 { font-size: 28px; margin: 0 0 8px; }
+        h2 { font-size: 18px; margin: 24px 0 8px; }
+        h3 { font-size: 16px; margin: 18px 0 6px; }
+        p { margin: 4px 0; font-size: 14px; }
+        ul { margin: 8px 0; padding-left: 24px; }
+        li { margin: 4px 0; font-size: 14px; }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 16px;
+            margin-bottom: 24px;
+        }
+
+        .hint {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        /* Edit mode styles */
+        .color-edit-mode .editable-element:hover {
+            outline: 2px dashed #2196F3 !important;
+            outline-offset: 2px;
+            cursor: pointer;
+        }
+
+        .color-edit-mode .editable-element.selected {
+            outline: 3px solid #2196F3 !important;
+            outline-offset: 2px;
+            box-shadow: 0 0 10px rgba(33, 150, 243, 0.3);
+        }
+
+        /* Color picker popup */
+        .color-picker-popup {
+            position: fixed;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            padding: 16px;
+            z-index: 10000;
+            min-width: 220px;
+            font-family: Arial, sans-serif;
+        }
+
+        .color-picker-popup h4 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .color-picker-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+
+        .color-picker-row label {
+            flex: 0 0 100px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .color-picker-row input[type="color"] {
+            width: 50px;
+            height: 30px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .color-picker-popup .close-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .color-picker-popup .close-btn:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <div class="page" id="page" contenteditable="true">
+            <h1>Ваше имя</h1>
+            <p class="subtitle">Желаемая должность / профессиональное направление</p>
+
+            <h2>Контакты</h2>
+            <p>Телефон: +7 ___ ___-__-__</p>
+            <p>Email: example@mail.com</p>
+            <p>Город: ____________</p>
+
+            <h2>Опыт работы</h2>
+            <p><strong>Компания, должность</strong> — период работы</p>
+            <p>Краткое описание обязанностей и достижений.</p>
+
+            <h2>Образование</h2>
+            <p><strong>Учебное заведение</strong> — направление, годы обучения</p>
+
+            <h2>Навыки</h2>
+            <p>• Навык 1</p>
+            <p>• Навык 2</p>
+
+            <div class="hint">
+                Совет: включите режим редактирования, затем кликните на любой элемент, чтобы изменить его цвета.
+            </div>
+        </div>
+    </div>
+
+    <!-- Color picker popup -->
+    <div class="color-picker-popup" id="color-picker-popup" style="display: none;">
+        <button class="close-btn" id="close-picker">&times;</button>
+        <h4>Изменить цвета</h4>
+        <div class="color-picker-row">
+            <label>Цвет фона:</label>
+            <input type="color" id="bg-color-picker" value="#ffffff">
+        </div>
+        <div class="color-picker-row">
+            <label>Цвет текста:</label>
+            <input type="color" id="text-color-picker" value="#000000">
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // State
+            let isEditMode = false;
+            let selectedElement = null;
+            let history = [];
+            let historyIndex = -1;
+            const MAX_HISTORY = 100;
+
+            // Elements
+            const page = document.getElementById('page');
+            const colorPicker = document.getElementById('color-picker-popup');
+            const bgColorInput = document.getElementById('bg-color-picker');
+            const textColorInput = document.getElementById('text-color-picker');
+            const closePickerBtn = document.getElementById('close-picker');
+
+            // Initialize
+            makeElementsEditable();
+            // Текст всегда можно редактировать, цветовой режим управляет только подсветкой/палитрой
+            if (page) {
+                page.contentEditable = 'true';
+            }
+
+            // Event listeners
+            closePickerBtn.addEventListener('click', () => hideColorPicker());
+
+            bgColorInput.addEventListener('input', function() {
+                if (selectedElement) {
+                    applyBackgroundColor(selectedElement, this.value);
+                }
+            });
+
+            textColorInput.addEventListener('input', function() {
+                if (selectedElement) {
+                    applyTextColor(selectedElement, this.value);
+                }
+            });
+
+            // Close picker on outside click
+            document.addEventListener('click', function(e) {
+                if (colorPicker.style.display !== 'none' &&
+                    !colorPicker.contains(e.target) &&
+                    e.target !== selectedElement &&
+                    !e.target.closest('.editable-element')) {
+                    hideColorPicker();
+                }
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.key === 'z') {
+                    e.preventDefault();
+                    undo();
+                }
+                if (e.ctrlKey && e.key === 'y') {
+                    e.preventDefault();
+                    redo();
+                }
+                if (e.key === 'Escape') {
+                    deselectAll();
+                    hideColorPicker();
+                }
+            });
+
+            function makeElementsEditable() {
+                const textElements = page.querySelectorAll('span, p, div, h1, h2, h3, h4, h5, h6, li, td, th, ul, strong');
+                textElements.forEach(el => {
+                    if (!el.textContent.trim() && !el.querySelector('*')) return;
+                    el.classList.add('editable-element');
+                    el.dataset.originalBg = getComputedStyle(el).backgroundColor;
+                    el.dataset.originalColor = getComputedStyle(el).color;
+                });
+            }
+
+            function toggleEditMode() {
+                isEditMode = !isEditMode;
+                page.classList.toggle('color-edit-mode', isEditMode);
+
+                if (isEditMode) {
+                    page.addEventListener('click', handleElementClick);
+                    page.focus();
+                } else {
+                    page.removeEventListener('click', handleElementClick);
+                    deselectAll();
+                    hideColorPicker();
+                }
+            }
+
+            function handleElementClick(e) {
+                if (!isEditMode) return;
+
+                const target = e.target.closest('.editable-element');
+                if (!target) {
+                    deselectAll();
+                    hideColorPicker();
+                    return;
+                }
+
+                e.stopPropagation();
+                selectElement(target);
+                showColorPicker(e.clientX, e.clientY, target);
+            }
+
+            function selectElement(el) {
+                deselectAll();
+                el.classList.add('selected');
+                selectedElement = el;
+
+                const bgColor = rgbToHex(getComputedStyle(el).backgroundColor);
+                const textColor = rgbToHex(getComputedStyle(el).color);
+
+                bgColorInput.value = bgColor || '#ffffff';
+                textColorInput.value = textColor || '#000000';
+            }
+
+            function deselectAll() {
+                document.querySelectorAll('.editable-element.selected').forEach(el => {
+                    el.classList.remove('selected');
+                });
+                selectedElement = null;
+            }
+
+            function showColorPicker(x, y, target) {
+                colorPicker.style.display = 'block';
+
+                const pickerRect = colorPicker.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                let left = x + 10;
+                let top = y + 10;
+
+                if (left + pickerRect.width > viewportWidth) {
+                    left = x - pickerRect.width - 10;
+                }
+                if (top + pickerRect.height > viewportHeight) {
+                    top = y - pickerRect.height - 10;
+                }
+
+                colorPicker.style.left = Math.max(10, left) + 'px';
+                colorPicker.style.top = Math.max(10, top) + 'px';
+            }
+
+            function hideColorPicker() {
+                colorPicker.style.display = 'none';
+            }
+
+            function applyBackgroundColor(el, color) {
+                saveToHistory();
+                el.style.backgroundColor = color;
+                ensureTextContrast(el, color);
+            }
+
+            function applyTextColor(el, color) {
+                saveToHistory();
+                el.style.color = color;
+                el.querySelectorAll('span, strong').forEach(span => {
+                    span.style.color = color;
+                });
+            }
+
+            function ensureTextContrast(el, bgColor) {
+                const luminance = getColorLuminance(bgColor);
+                const isDark = luminance < 0.5;
+
+                const textElements = el.querySelectorAll('span, p, div, strong');
+                const allElements = [el, ...textElements];
+
+                allElements.forEach(textEl => {
+                    const currentColor = rgbToHex(getComputedStyle(textEl).color);
+                    const currentLuminance = getColorLuminance(currentColor);
+                    const contrastRatio = (Math.max(luminance, currentLuminance) + 0.05) /
+                                         (Math.min(luminance, currentLuminance) + 0.05);
+                    if (contrastRatio < 4.5) {
+                        textEl.style.color = isDark ? '#ffffff' : '#000000';
+                    }
+                });
+            }
+
+            function getColorLuminance(hex) {
+                const rgb = hexToRgb(hex);
+                if (!rgb) return 0.5;
+
+                const [r, g, b] = [rgb.r, rgb.g, rgb.b].map(v => {
+                    v /= 255;
+                    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                });
+
+                return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            }
+
+            function rgbToHex(rgb) {
+                if (!rgb) return '#ffffff';
+                if (rgb.startsWith('#')) return rgb;
+                const match = rgb.match(/\\d+/g);
+                if (!match || match.length < 3) return '#ffffff';
+                const [r, g, b] = match.map(Number);
+                return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+            }
+
+            function hexToRgb(hex) {
+                const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : null;
+            }
+
+            function saveToHistory() {
+                const state = page.innerHTML;
+                history = history.slice(0, historyIndex + 1);
+                history.push(state);
+                historyIndex = history.length - 1;
+                if (history.length > MAX_HISTORY) {
+                    history.shift();
+                    historyIndex--;
+                }
+                updateHistoryState();
+            }
+
+            function undo() {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    page.innerHTML = history[historyIndex];
+                    makeElementsEditable();
+                    deselectAll();
+                    hideColorPicker();
+                    updateHistoryState();
+                }
+            }
+
+            function redo() {
+                if (historyIndex < history.length - 1) {
+                    historyIndex++;
+                    page.innerHTML = history[historyIndex];
+                    makeElementsEditable();
+                    deselectAll();
+                    hideColorPicker();
+                    updateHistoryState();
+                }
+            }
+
+            function updateHistoryState() {
+                window.parent.postMessage({
+                    type: 'history-update',
+                    canUndo: historyIndex > 0,
+                    canRedo: historyIndex < history.length - 1
+                }, '*');
+            }
+
+            function insertElementFromParent(type) {
+                var el = null;
+                switch (type) {
+                    case 'heading':
+                        el = document.createElement('h2');
+                        el.textContent = 'Новый заголовок';
+                        break;
+                    case 'subheading':
+                        el = document.createElement('h3');
+                        el.textContent = 'Новый подзаголовок';
+                        break;
+                    case 'paragraph':
+                        el = document.createElement('p');
+                        el.textContent = 'Новый абзац текста. Замените этот текст на свой.';
+                        break;
+                    case 'bulleted-list':
+                        el = document.createElement('ul');
+                        var li1 = document.createElement('li');
+                        li1.textContent = 'Пункт списка 1';
+                        var li2 = document.createElement('li');
+                        li2.textContent = 'Пункт списка 2';
+                        el.appendChild(li1);
+                        el.appendChild(li2);
+                        break;
+                    case 'highlight-box':
+                        el = document.createElement('div');
+                        el.style.margin = '12px 0';
+                        el.style.padding = '12px 16px';
+                        el.style.background = '#eff6ff';
+                        el.style.borderRadius = '8px';
+                        el.textContent = 'Важный блок. Используйте его для выделения ключевой информации.';
+                        break;
+                }
+                if (!el) return;
+                el.classList.add('editable-element');
+                page.appendChild(el);
+                makeElementsEditable();
+                deselectAll();
+                hideColorPicker();
+                saveToHistory();
+            }
+
+            window.addEventListener('message', function(e) {
+                const msg = e.data;
+                if (!msg || !msg.type) return;
+
+                switch (msg.type) {
+                    case 'toggle-edit-mode':
+                        toggleEditMode();
+                        break;
+                    case 'undo':
+                        undo();
+                        break;
+                    case 'redo':
+                        redo();
+                        break;
+                    case 'download':
+                        const clone = page.cloneNode(true);
+                        clone.querySelectorAll('.editable-element').forEach(el => {
+                            el.classList.remove('editable-element', 'selected');
+                        });
+                        clone.classList.remove('color-edit-mode');
+                        clone.removeAttribute('contenteditable');
+                        const fullHtml = '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><title>Resume</title>' +
+                            '<style>' + document.querySelector('style').textContent + '</style></head><body>' +
+                            '<div class="page-container"><div class="page">' + clone.innerHTML + '</div></div></body></html>';
+                        window.parent.postMessage({
+                            type: 'download-ready',
+                            html: fullHtml,
+                            fileName: 'resume-blank.html'
+                        }, '*');
+                        break;
+                    case 'insert-element':
+                        insertElementFromParent(msg.elementType);
+                        break;
+                }
+            });
+
+            // Input event for text editing history
+            page.addEventListener('input', function() {
+                saveToHistory();
+            });
+
+            // Save initial state
+            saveToHistory();
+
+            console.log('🎨 Blank page color editor initialized');
+        })();
+    <\\/script>
+</body>
+
+</html>`;
+            }
+
+            /**
+            * Show loading state
+            */
+            function showLoading() {
+                uploadView.classList.add('hidden');
+                errorContainer.classList.add('hidden');
+                resultView.classList.remove('active');
+                loadingOverlay.classList.remove('hidden');
+            }
+
+            /**
+            * Show result
+            */
+            function showResult(urlOrHtml) {
+                loadingOverlay.classList.add('hidden');
+                uploadView.classList.add('hidden');
+                errorContainer.classList.add('hidden');
+                resultView.classList.add('active');
+
+                // Reset edit mode
+                isEditMode = false;
+                toggleEditBtn.classList.remove('active');
+                toggleEditBtn.textContent = '🎨 Режим редактирования';
+
+                // Load result in iframe
+                if (urlOrHtml.startsWith('/') || urlOrHtml.startsWith('http')) {
+                    currentHtmlUrl = urlOrHtml;
+                    resultIframe.src = urlOrHtml;
+                } else {
+                    // It's HTML content, create blob URL
+                    const blob = new Blob([urlOrHtml], { type: 'text/html' });
+                    currentHtmlUrl = URL.createObjectURL(blob);
+                    resultIframe.src = currentHtmlUrl;
+                }
+            }
+
+            /**
+            * Show error state
+            */
+            function showError(message) {
+                loadingOverlay.classList.add('hidden');
+                uploadView.classList.add('hidden');
+                resultView.classList.remove('active');
+                errorContainer.classList.remove('hidden');
+                errorMessage.textContent = message;
+            }
+
+            /**
+            * Reset to upload view
+            */
+            function resetToUpload() {
+                loadingOverlay.classList.add('hidden');
+                errorContainer.classList.add('hidden');
+                resultView.classList.remove('active');
+                uploadView.classList.remove('hidden');
+                pdfInput.value = '';
+
+                // Clean up blob URL if created
+                if (currentHtmlUrl && currentHtmlUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(currentHtmlUrl);
+                }
+                currentHtmlUrl = null;
+            }
+
+            /**
+            * Download HTML file
+            */
+            function downloadHtml(html, fileName = 'converted.html') {
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            console.log('📄 PDF Converter initialized');
+        })();
+    </script>
+</body>
+
+</html>

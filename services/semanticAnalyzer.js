@@ -95,8 +95,8 @@ async function ensureGemini() {
             GoogleGenerativeAI = mod.GoogleGenerativeAI;
         }
         const genAI = new GoogleGenerativeAI(geminiKey);
-        geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        console.log('✅ Gemini model initialized: gemini-2.5-flash');
+        geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+        console.log('✅ Gemini model initialized: gemini-2.5-pro');
         return true;
     } catch (err) {
         console.warn('⚠️ Gemini initialization failed:', err.message);
@@ -169,53 +169,83 @@ Return ONLY valid JSON in this format:
 }
 
 /**
- * Build prompt for multimodal (image + blocks) analysis
+ * Build prompt for multimodal (image + blocks + layout) analysis
+ *
+ * ВАЖНО: сюда пробрасывается пиксель-то-пиксель геометрия из pdfStructureParser
+ * (backgrounds + pdfLines), чтобы LM Studio/LLM видел реальные цвета и фигуры,
+ * а не придуманные.
  */
-function buildMultimodalPrompt(blocks) {
+function buildMultimodalPrompt(structure, blocks) {
     const blockList = blocks.map(b => ({
         id: b.id,
-        text: b.text.substring(0, 100), // Truncate long texts
-        x: Math.round(b.bbox.x),
-        y: Math.round(b.bbox.y),
+        text: (b.text || '').substring(0, 120), // Truncate long texts
+        x: Math.round(b.bbox?.x || 0),
+        y: Math.round(b.bbox?.y || 0),
+        width: Math.round(b.bbox?.width || 0),
+        height: Math.round(b.bbox?.height || 0),
         fontSize: Math.round(b.font?.size || 12)
     }));
 
-    return `Analyze this resume image along with the extracted text blocks. 
+    const layoutSummary = (structure?.pages || []).map(page => ({
+        pageNumber: page.pageNumber || 1,
+        width: Math.round(page.width || 0),
+        height: Math.round(page.height || 0),
+        backgrounds: (page.backgrounds || []).map(bg => ({
+            id: bg.id,
+            type: bg.type,
+            color: bg.color,
+            bbox: bg.bbox
+        })),
+        lines: (page.pdfLines || []).map(line => ({
+            id: line.id,
+            type: line.type,
+            color: line.color,
+            width: line.width,
+            bbox: line.bbox
+        }))
+    }));
 
-TASK 1 - VISUAL SECTIONS & COLORS:
-Identify ALL distinct visual regions/sections with different background colors.
-Look for: headers, sidebars, main content areas, skill bars, progress indicators, colored boxes, banners.
-For EACH section provide the EXACT background color in HEX format and the text color used in that section.
+    return `Analyze this resume image together with the provided PDF layout geometry.
+
+You are given TWO sources of information:
+1) An exact pixel-perfect layout extracted from the original PDF (background rectangles, colored bars, separator lines) with colors and bounding boxes.
+2) Text blocks with their coordinates and font sizes.
+
+TASK 1 - VISUAL SECTIONS & COLORS (USE LAYOUT SUMMARY):
+Using ONLY the provided layoutSummary below and what you see on the image,
+identify logical visual sections (header, sidebar, content areas, colored banners, etc.).
+For EACH section, return:
+    - id (string),
+    - name (string),
+    - bbox (x, y, width, height) in the SAME coordinate system as in layoutSummary,
+    - backgroundColor (HEX),
+    - textColor (HEX).
 
 TASK 2 - FIELD MAPPINGS:
-Map each text block to its CV field type.
+For EACH text block, map it to a CV field type.
 
-TEXT BLOCKS (with positions):
+LAYOUT SUMMARY (from PDF parser, pixel-perfect):
+${JSON.stringify(layoutSummary, null, 2)}
+
+TEXT BLOCKS (with positions and sizes):
 ${JSON.stringify(blockList, null, 2)}
 
-Field types: fullName, firstName, lastName, jobTitle, email, phone, address, city, postalCode, website, linkedin, github, birthdate, summary, experienceHeader, experienceTitle, experienceCompany, experienceDate, experienceDescription, educationHeader, educationDegree, educationInstitution, educationDate, skillsHeader, skill, languageHeader, language, sectionHeader, bodyText, unknown
+Field types: fullName, firstName, lastName, jobTitle, email, phone, address, city, postalCode, website, linkedin, github, birthdate, summary, experienceHeader, experienceTitle, experienceCompany, experienceDate, experienceDescription, educationHeader, educationDegree, educationInstitution, educationDate, skillsHeader, skill, languageHeader, language, certificateHeader, certificate, projectHeader, projectTitle, projectDescription, referenceHeader, referenceName, referenceContact, sectionHeader, bodyText, unknown
 
 Return ONLY valid JSON with this EXACT structure:
 {
-  "sections": [
-    { 
-      "id": "section_1", 
-      "name": "header", 
-      "bbox": {"x": 0, "y": 0, "width": 600, "height": 120},
-      "backgroundColor": "#2563EB",
-      "textColor": "#FFFFFF"
-    },
-    { 
-      "id": "section_2", 
-      "name": "sidebar", 
-      "bbox": {"x": 0, "y": 120, "width": 200, "height": 680},
-      "backgroundColor": "#1E293B",
-      "textColor": "#E2E8F0"
-    }
-  ],
-  "mappings": [
-    { "blockId": "block_1_0", "fieldType": "fullName", "confidence": 0.95, "sectionId": "section_1" }
-  ]
+    "sections": [
+        {
+            "id": "section_1",
+            "name": "header",
+            "bbox": {"x": 0, "y": 0, "width": 600, "height": 120},
+            "backgroundColor": "#RRGGBB",
+            "textColor": "#RRGGBB"
+        }
+    ],
+    "mappings": [
+        { "blockId": "block_1_0", "fieldType": "fullName", "confidence": 0.95, "sectionId": "section_1" }
+    ]
 }`;
 }
 
@@ -472,7 +502,7 @@ async function analyzeWithAI(structure, imageBase64 = null) {
 
                 const response = await geminiModel.generateContent([
                     { inlineData: { mimeType: mime, data } },
-                    { text: buildMultimodalPrompt(allBlocks) }
+                    { text: buildMultimodalPrompt(structure, allBlocks) }
                 ]);
                 result = response?.response?.text?.() || '';
             } else {
@@ -513,7 +543,7 @@ async function analyzeWithAI(structure, imageBase64 = null) {
                 messages = [{
                     role: 'user',
                     content: [
-                        { type: 'text', text: buildMultimodalPrompt(allBlocks) },
+                        { type: 'text', text: buildMultimodalPrompt(structure, allBlocks) },
                         { type: 'image_url', image_url: { url: imageBase64 } }
                     ]
                 }];
@@ -684,7 +714,23 @@ async function analyzeSemantics(structure, options = {}) {
         useAI = options.useAI !== false;
     }
 
-    // Analyze each page separately to get page-specific sections
+    // 1) Global AI path (Gemini or OpenAI-compatible, e.g. LM Studio)
+    // Если доступен LLM, сначала пробуем полноценный анализ
+    if (useAI) {
+        try {
+            const imageBase64 = typeof options === 'object' ? options.imageBase64 || null : null;
+            const aiSemantics = await analyzeWithAI(structure, imageBase64);
+            if (aiSemantics && (aiSemantics.mappings?.length || aiSemantics.sections?.length)) {
+                console.log('✅ Semantic analysis via AI (Gemini / OpenAI-compatible)');
+                return mergeStructureWithSemantics(structure, aiSemantics);
+            }
+        } catch (err) {
+            console.warn('AI semantic analysis failed, falling back to per-page/heuristics:', err.message);
+        }
+    }
+
+    // 2) Per-page fallback: сначала пробуем AI для каждой страницы,
+    // при отсутствии результата используем чисто эвристики (без LLM)
     const allMappings = [];
     const allSections = [];
 
@@ -836,105 +882,16 @@ function analyzePageWithHeuristics(page, pageNum) {
     const sections = [];
     const mappings = [];
 
-    // Sort blocks by Y position
-    const allBlocks = [...(page.blocks || [])].sort((a, b) =>
-        (a.bbox?.y || 0) - (b.bbox?.y || 0)
-    );
-
-    if (allBlocks.length === 0) {
-        // No blocks - just white background
-        sections.push({
-            id: `page${pageNum}_section_1`,
-            name: 'content',
-            bbox: { x: 0, y: 0, width: pageWidth, height: pageHeight },
-            backgroundColor: '#FFFFFF',
-            textColor: '#333333',
-            pageNumber: pageNum
-        });
-        return { mappings, sections };
-    }
-
-    // ONLY first page gets special treatment (header + contact bar)
-    if (pageNum === 1) {
-        let headerBottomY = 0;
-        let contactTopY = -1;
-        let contactBottomY = 0;
-
-        // Find header (large font at top)
-        for (const block of allBlocks) {
-            const y = block.bbox?.y || 0;
-            const h = block.bbox?.height || 20;
-            const fontSize = block.font?.size || 12;
-
-            if (y < 150 && fontSize > 16) {
-                headerBottomY = Math.max(headerBottomY, y + h);
-            }
-        }
-
-        // Find contact info (email, phone)
-        for (const block of allBlocks) {
-            const y = block.bbox?.y || 0;
-            const h = block.bbox?.height || 20;
-            const text = (block.text || '');
-
-            const isContact = /@/.test(text) || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4,5}/.test(text);
-
-            if (isContact && y < 250) {
-                if (contactTopY < 0) contactTopY = y;
-                contactBottomY = Math.max(contactBottomY, y + h);
-            }
-        }
-
-        let sectionIndex = 1;
-
-        // Header section (light blue)
-        if (headerBottomY > 0) {
-            const headerEnd = contactTopY > 0 ? contactTopY : headerBottomY;
-            sections.push({
-                id: `page${pageNum}_section_${sectionIndex++}`,
-                name: 'header',
-                bbox: { x: 0, y: 0, width: pageWidth, height: headerEnd },
-                backgroundColor: '#B8D4E8',
-                textColor: '#1A1A1A',
-                pageNumber: pageNum
-            });
-        }
-
-        // Contact bar (dark gray)
-        if (contactTopY > 0) {
-            sections.push({
-                id: `page${pageNum}_section_${sectionIndex++}`,
-                name: 'contact',
-                bbox: { x: 0, y: contactTopY, width: pageWidth, height: contactBottomY - contactTopY },
-                backgroundColor: '#4A5568',
-                textColor: '#FFFFFF',
-                pageNumber: pageNum
-            });
-        }
-
-        // Content area (white)
-        const contentStart = contactBottomY > 0 ? contactBottomY : headerBottomY;
-        if (contentStart < pageHeight - 50) {
-            sections.push({
-                id: `page${pageNum}_section_${sectionIndex++}`,
-                name: 'content',
-                bbox: { x: 0, y: contentStart, width: pageWidth, height: pageHeight - contentStart },
-                backgroundColor: '#FFFFFF',
-                textColor: '#333333',
-                pageNumber: pageNum
-            });
-        }
-    } else {
-        // Pages 2+: just white background
-        sections.push({
-            id: `page${pageNum}_section_1`,
-            name: 'content',
-            bbox: { x: 0, y: 0, width: pageWidth, height: pageHeight },
-            backgroundColor: '#FFFFFF',
-            textColor: '#333333',
-            pageNumber: pageNum
-        });
-    }
+    // Упрощённые эвристики: НИКАКИХ искусственных цветных шапок.
+    // Если нет данных от AI/LM, считаем всю страницу одной белой зоной.
+    sections.push({
+        id: `page${pageNum}_section_1`,
+        name: 'content',
+        bbox: { x: 0, y: 0, width: pageWidth, height: pageHeight },
+        backgroundColor: '#FFFFFF',
+        textColor: '#333333',
+        pageNumber: pageNum
+    });
 
     return { mappings, sections };
 }

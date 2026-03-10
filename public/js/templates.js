@@ -59,7 +59,7 @@
       const useBtn = document.createElement('a');
       useBtn.className = 'btn btn-primary';
       useBtn.textContent = 'Использовать справа';
-      useBtn.href = `/pages/cv-builder?example=${encodeURIComponent(it.url)}`;
+      useBtn.href = `/pages/pdf-converter?example=${encodeURIComponent(it.url)}`;
 
       actions.appendChild(openBtn);
       actions.appendChild(useBtn);

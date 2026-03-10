@@ -6,7 +6,9 @@ const { z } = require('zod');
 let GoogleGenerativeAI = null;
 let Groq = null;
 
-const AI_PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+// AI_PROVIDER: 'openai', 'llava', 'gemini', 'groq' и т.п.
+// По умолчанию используем локальный OpenAI-совместимый хост (например, Llava в LM Studio/Ollama)
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
 const OAI_BASE_URL = process.env.OPENAI_BASE_URL || process.env.OAI_BASE_URL || 'http://127.0.0.1:1234/v1';
 const OAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OAI_API_KEY || '';
 const OAI_MODEL = process.env.OPENAI_MODEL || process.env.OAI_MODEL || 'llm openai/gpt-oss-20b';
@@ -29,8 +31,8 @@ async function ensureGemini() {
       GoogleGenerativeAI = mod.GoogleGenerativeAI;
     }
     const genAI = new GoogleGenerativeAI(geminiKey);
-    geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    console.log('✅ Gemini model initialized: gemini-2.5-flash');
+    geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    console.log('✅ Gemini model initialized: gemini-2.5-pro');
     return true;
   } catch (err) {
     console.warn('⚠️ Не удалось инициализировать Gemini:', err.message);
@@ -119,6 +121,8 @@ function extractHTML(text) {
 async function callLLM(prompt) {
   // Авто-фолбэк: если выбран gemini, но не инициализирован и задан OpenAI-совместимый хост — используем openai
   let provider = AI_PROVIDER;
+  // Алиас: llava -> openai-совместимый локальный сервер
+  if (provider === 'llava') provider = 'openai';
   if (provider === 'gemini' && !geminiModel && OAI_BASE_URL) {
     provider = 'openai';
   }
@@ -253,16 +257,6 @@ module.exports = {
   // Генерация HTML (Vue совместимый, но без сборки) по изображению первой страницы PDF
   // Поддерживается только провайдер Gemini (нужен GEMINI_API_KEY). Возвращает строку HTML.
   generateHtmlFromImage: async function ({ imageBase64, title = 'Resume', strict = false }) {
-    // Сначала пробуем Gemini (мультимодальный ввод изображений).
-    // Пробуем Gemini только если задан ключ, чтобы не спамить предупреждениями
-    let useGemini = false;
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        useGemini = await ensureGemini();
-      } catch (_) {
-        useGemini = false;
-      }
-    }
     if (!imageBase64 || typeof imageBase64 !== 'string') {
       throw new Error('imageBase64 is required');
     }
@@ -305,46 +299,8 @@ module.exports = {
       const dataUrl = `data:${mime};base64,${data}`;
       return `<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>html,body{margin:0;padding:0;background:#f8fafc} .page-wrap{display:flex;align-items:center;justify-content:center;padding:16px} .page{max-width:100%;height:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);background:#fff}</style></head><body><div class="page-wrap"><img class="page" src="${dataUrl}" alt="${title}"></div></body></html>`;
     };
-
-    console.log(`🤖 generateHtmlFromImage: Gemini available = ${useGemini}, has model = ${!!geminiModel}`);
-
-    if (useGemini && geminiModel) {
-      console.log('✨ Using Gemini API for HTML generation...');
-      try {
-        // Первая попытка (основной промпт)
-        let res = await geminiModel.generateContent([
-          { inlineData: { mimeType: mime, data } },
-          { text: promptText }
-        ]);
-        let text = res?.response?.text?.() || res?.text?.() || '';
-        console.log(`📝 Gemini response length: ${text.length} chars`);
-        let html = extractHTML(text);
-        // Ретрай с более строгими требованиями
-        if (!html) {
-          console.log('⚠️ First attempt failed, retrying with stricter prompt...');
-          const retryPrompt = `${promptText}\nВерни строго чистый HTML, начинай с <!DOCTYPE html>, без Markdown и бэктиков.`;
-          res = await geminiModel.generateContent([
-            { inlineData: { mimeType: mime, data } },
-            { text: retryPrompt }
-          ]);
-          text = res?.response?.text?.() || res?.text?.() || '';
-          html = extractHTML(text);
-        }
-        if (html) {
-          console.log('✅ Gemini successfully generated HTML with colors');
-          return html;
-        }
-        console.log('❌ Gemini failed to generate valid HTML');
-        if (strict) throw new Error('AI не вернул валидный HTML');
-      } catch (geminiErr) {
-        console.error('❌ Gemini error:', geminiErr.message);
-        if (strict) throw geminiErr;
-      }
-      // иначе продолжаем попытку через OpenAI-совместимый хост
-    }
-
-    console.log('🔄 Falling back to OpenAI-compatible endpoint...');
-    // Fallback: OpenAI-совместимый хост (например LM Studio) с поддержкой мультимодальных сообщений.
+    console.log('🔄 Using OpenAI-compatible endpoint (например локальный Llava) для генерации HTML...');
+    // Используем OpenAI-совместимый хост (например, локальный Llava через LM Studio/Ollama) с поддержкой мультимодальных сообщений.
     // Нормализуем базовый URL: гарантируем наличие /v1
     let base = OAI_BASE_URL.replace(/\/$/, '');
     if (!/\/v1$/i.test(base)) base = `${base}/v1`;

@@ -593,6 +593,14 @@ class CVBuilder {
 
     restoreCustomPdfTemplate() {
         try {
+            // Не восстанавливаем custom template если в URL указан конкретный шаблон
+            const url = new URL(window.location.href);
+            const templateFromUrl = url.searchParams.get('template');
+            if (templateFromUrl) {
+                // Шаблон выбран пользователем - не перезаписываем
+                return;
+            }
+
             const stored = localStorage.getItem('customPdfTemplateUrl');
             if (!stored) return;
             this.customPdfTemplateUrl = stored;
@@ -1806,13 +1814,13 @@ class CVBuilder {
                 }
             } else if (template === 'custom') {
                 this.selectedDocxTemplate = null;
-                console.log('Режим создания с нуля');
-                this.userData.template = 'modern';
+                console.log('Режим создания с нуля - чистый лист');
+                this.userData.template = 'blank';
                 this.ensurePreviewVisible();
                 this.pushLivePreview();
                 this.updateTemplateLabel();
-                this.showTemplateToast('modern');
-                this.setPreviewSrc('modern');
+                this.showTemplateToast('blank');
+                this.setPreviewSrc('blank');
             }
         } catch (err) {
             console.error('Ошибка загрузки шаблона:', err);
@@ -1828,7 +1836,8 @@ class CVBuilder {
                 minimal: 'Минималистичный',
                 creative: 'Креативный',
                 european: 'Европейский',
-                europass: 'Europass'
+                europass: 'Europass',
+                blank: 'Чистый лист'
             };
             const docxMap = { 'experienced': 'Experienced', 'entry-level': 'Entry-level' };
             const label = nameMap[templateKey] || 'Шаблон';
@@ -1984,7 +1993,7 @@ class CVBuilder {
             if (ready) return;
             barEl = document.createElement('div');
             barEl.className = 'flex items-center justify-between gap-3 px-3 py-2 text-xs text-amber-800 bg-amber-50 border-b border-amber-200';
-            const next = encodeURIComponent('/pages/cv-builder' + window.location.search);
+            const next = encodeURIComponent('/pages/pdf-converter' + window.location.search);
             barEl.innerHTML = `
                 <span>Предпросмотр не загрузился. Возможно, требуется вход или сервер не запущен.</span>
                 <span class="flex items-center gap-2">
@@ -2286,7 +2295,8 @@ class CVBuilder {
             minimal: 'Минималистичный',
             creative: 'Креативный',
             european: 'Европейский',
-            europass: 'Europass'
+            europass: 'Europass',
+            blank: 'Чистый лист'
         };
         const name = map[this.userData?.template] || 'Современный';
         el.textContent = name;
