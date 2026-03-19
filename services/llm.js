@@ -12,6 +12,8 @@ const AI_PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
 const OAI_BASE_URL = process.env.OPENAI_BASE_URL || process.env.OAI_BASE_URL || 'http://127.0.0.1:1234/v1';
 const OAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OAI_API_KEY || '';
 const OAI_MODEL = process.env.OPENAI_MODEL || process.env.OAI_MODEL || 'llm openai/gpt-oss-20b';
+// Gemini model name: позволяем переопределить через ENV, по умолчанию используем flash-вариант с бесплатной квотой
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 // Инициализация клиентов под выбранного провайдера (ленивая)
 let geminiModel = null;
@@ -31,8 +33,8 @@ async function ensureGemini() {
       GoogleGenerativeAI = mod.GoogleGenerativeAI;
     }
     const genAI = new GoogleGenerativeAI(geminiKey);
-    geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
-    console.log('✅ Gemini model initialized: gemini-2.5-pro');
+    geminiModel = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+    console.log('✅ Gemini model initialized:', GEMINI_MODEL);
     return true;
   } catch (err) {
     console.warn('⚠️ Не удалось инициализировать Gemini:', err.message);
@@ -123,9 +125,6 @@ async function callLLM(prompt) {
   let provider = AI_PROVIDER;
   // Алиас: llava -> openai-совместимый локальный сервер
   if (provider === 'llava') provider = 'openai';
-  if (provider === 'gemini' && !geminiModel && OAI_BASE_URL) {
-    provider = 'openai';
-  }
 
   if (provider === 'gemini') {
     if (!geminiModel) {
@@ -242,6 +241,26 @@ async function evaluateOpenAnswer({ question, answer }) {
     obj = extractJSON(retryText);
   }
   if (!obj) throw new Error('AI provider did not return valid JSON for evaluation');
+
+  // Нормализуем score от модели: часто она возвращает 0–100 или строку
+  if (obj && typeof obj === 'object') {
+    let s = obj.score;
+    if (typeof s === 'string') {
+      // Вытаскиваем первое число из строки, поддерживаем запятую как разделитель
+      const m = s.match(/[0-9]+(?:[\.,][0-9]+)?/);
+      if (m) {
+        s = parseFloat(m[0].replace(',', '.'));
+      }
+    }
+    if (typeof s === 'number' && Number.isFinite(s)) {
+      // Если модель вернула проценты 0–100, приводим к 0–1
+      if (s > 1 && s <= 100) s = s / 100;
+      // Жёстко ограничиваем интервалом [0,1], чтобы пройти схему
+      if (s < 0) s = 0;
+      if (s > 1) s = 1;
+      obj.score = s;
+    }
+  }
 
   const parsed = OpenEvaluationSchema.safeParse(obj);
   if (!parsed.success) {

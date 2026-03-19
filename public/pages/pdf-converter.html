@@ -526,6 +526,9 @@
                 <button class="btn btn-success" id="download-btn">
                     💾 Скачать HTML
                 </button>
+                <button class="btn btn-secondary" id="attach-assessment-btn">
+                    📊 Добавить результат теста
+                </button>
                 <button class="btn btn-secondary" id="new-file-btn">
                     📤 Новый файл
                 </button>
@@ -572,6 +575,14 @@
                 <span>▢</span>
                 <span>Цветной блок</span>
             </button>
+            <button class="element-btn" id="add-image-box">
+                <span>🖼</span>
+                <span>Квадрат с фото</span>
+            </button>
+            <button class="element-btn" id="add-tag-pill">
+                <span>🏷</span>
+                <span>Тег‑лейбл</span>
+            </button>
         </div>
     </div>
 
@@ -607,6 +618,7 @@
             const undoBtn = document.getElementById('undo-btn');
             const redoBtn = document.getElementById('redo-btn');
             const downloadBtn = document.getElementById('download-btn');
+            const attachAssessmentBtn = document.getElementById('attach-assessment-btn');
             const newFileBtn = document.getElementById('new-file-btn');
             const retryBtn = document.getElementById('retry-btn');
             const elementsPanel = document.getElementById('elements-panel');
@@ -617,6 +629,8 @@
             const addParagraphBtn = document.getElementById('add-paragraph');
             const addBulletedListBtn = document.getElementById('add-bulleted-list');
             const addHighlightBoxBtn = document.getElementById('add-highlight-box');
+            const addImageBoxBtn = document.getElementById('add-image-box');
+            const addTagPillBtn = document.getElementById('add-tag-pill');
 
             // State
             let currentHtmlUrl = null;
@@ -632,6 +646,61 @@
                 blankBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     createBlankDocument();
+                });
+            }
+
+            if (attachAssessmentBtn) {
+                attachAssessmentBtn.addEventListener('click', () => {
+                    try {
+                        const raw = localStorage.getItem('savedAssessmentResult');
+                        if (!raw) {
+                            alert('Нет сохранённого результата теста. Пройдите AI-тест и нажмите "Сохранить результат".');
+                            return;
+                        }
+                        const saved = JSON.parse(raw);
+                        if (!saved || typeof saved.score !== 'number') {
+                            alert('Результат теста некорректен или повреждён. Попробуйте сохранить его заново.');
+                            return;
+                        }
+                        const percent = Math.round(saved.score * 100);
+                        if (percent < 65) {
+                            alert('Прикрепление к резюме доступно при результате от 65%.');
+                            return;
+                        }
+
+                        const summaryParts = [];
+                        if (saved.profession) summaryParts.push(`Профессия: ${saved.profession}`);
+                        if (saved.difficulty) summaryParts.push(`Уровень: ${saved.difficulty}`);
+                        if (typeof saved.totalQuestions === 'number') summaryParts.push(`Вопросов: ${saved.totalQuestions}`);
+                        summaryParts.push(`Итоговый балл: ${percent}%`);
+                        if (saved.submittedAt) {
+                            const d = new Date(saved.submittedAt);
+                            summaryParts.push(`Дата: ${d.toLocaleDateString('ru-RU')}`);
+                        }
+
+                        const summaryText = summaryParts.join(' | ');
+
+                        if (!resultIframe || !resultIframe.contentWindow) {
+                            alert('Холст ещё не загружен. Сначала создайте или откройте резюме.');
+                            return;
+                        }
+
+                        resultIframe.contentWindow.postMessage({
+                            type: 'insert-assessment-result',
+                            result: {
+                                summary: summaryText,
+                                profession: saved.profession,
+                                difficulty: saved.difficulty,
+                                totalQuestions: saved.totalQuestions,
+                                score: saved.score,
+                                percent,
+                                submittedAt: saved.submittedAt
+                            }
+                        }, '*');
+                    } catch (err) {
+                        console.error('Ошибка при прикреплении результата теста:', err);
+                        alert('Не удалось прочитать сохранённый результат теста.');
+                    }
                 });
             }
 
@@ -663,6 +732,12 @@
             }
             if (addHighlightBoxBtn) {
                 addHighlightBoxBtn.addEventListener('click', () => sendInsertElement('highlight-box'));
+            }
+            if (addImageBoxBtn) {
+                addImageBoxBtn.addEventListener('click', () => sendInsertElement('image-box'));
+            }
+            if (addTagPillBtn) {
+                addTagPillBtn.addEventListener('click', () => sendInsertElement('tag-pill'));
             }
 
             // Drag and drop
@@ -814,8 +889,8 @@
              * Create blank editable document (start from scratch)
              */
             function createBlankDocument() {
-                const blankHtml = getBlankDocumentHtml();
-                showResult(blankHtml);
+                // Открываем отдельную страницу редактора чистого листа
+                showResult('/pages/blank-editor.html');
             }
 
             /**
@@ -987,6 +1062,19 @@
             <label>Цвет текста:</label>
             <input type="color" id="text-color-picker" value="#000000">
         </div>
+        <div class="color-picker-row">
+            <label>Размер текста:</label>
+            <select id="font-size-picker">
+                <option value="12px">12</option>
+                <option value="14px">14</option>
+                <option value="16px" selected>16</option>
+                <option value="18px">18</option>
+                <option value="20px">20</option>
+                <option value="24px">24</option>
+                <option value="28px">28</option>
+                <option value="32px">32</option>
+            </select>
+        </div>
     </div>
 
     <script>
@@ -1006,6 +1094,7 @@
             const bgColorInput = document.getElementById('bg-color-picker');
             const textColorInput = document.getElementById('text-color-picker');
             const closePickerBtn = document.getElementById('close-picker');
+            const fontSizePicker = document.getElementById('font-size-picker');
 
             // Initialize
             makeElementsEditable();
@@ -1028,6 +1117,14 @@
                     applyTextColor(selectedElement, this.value);
                 }
             });
+
+            if (fontSizePicker) {
+                fontSizePicker.addEventListener('change', function() {
+                    if (selectedElement) {
+                        applyFontSize(selectedElement, this.value);
+                    }
+                });
+            }
 
             // Close picker on outside click
             document.addEventListener('click', function(e) {
@@ -1104,6 +1201,11 @@
 
                 bgColorInput.value = bgColor || '#ffffff';
                 textColorInput.value = textColor || '#000000';
+
+                if (fontSizePicker) {
+                    const computedSize = getComputedStyle(el).fontSize || '16px';
+                    fontSizePicker.value = computedSize;
+                }
             }
 
             function deselectAll() {
@@ -1149,6 +1251,14 @@
                 el.style.color = color;
                 el.querySelectorAll('span, strong').forEach(span => {
                     span.style.color = color;
+                });
+            }
+
+            function applyFontSize(el, size) {
+                saveToHistory();
+                el.style.fontSize = size;
+                el.querySelectorAll('span, p, div, li, strong').forEach(child => {
+                    child.style.fontSize = size;
                 });
             }
 
@@ -1278,8 +1388,12 @@
                 if (!el) return;
                 el.classList.add('editable-element');
                 page.appendChild(el);
+
+                // Обновляем редактируемые элементы и выделяем только что добавленный
                 makeElementsEditable();
                 deselectAll();
+                selectElement(el);
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 hideColorPicker();
                 saveToHistory();
             }

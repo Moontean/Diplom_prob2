@@ -467,6 +467,35 @@ function postProcessHtml(html) {
             color: #999;
         }
 
+        /* Delete handle for editable elements */
+        .editable-delete {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            background: #f97373;
+            border: 1px solid #b91c1c;
+            color: white;
+            font-size: 12px;
+            line-height: 16px;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            transform: scale(0.9);
+        }
+
+        .color-edit-mode .editable-element:hover .editable-delete,
+        .color-edit-mode .editable-element.selected .editable-delete {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
         /* SVG fixes */
         svg {
             pointer-events: auto !important;
@@ -492,6 +521,19 @@ function postProcessHtml(html) {
             font-family: monospace;
             margin: 0 4px;
         }
+        
+        .resize-touchbar {
+            position: fixed;
+            display: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            background: #ffffff;
+            border: 2px solid #3b82f6;
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.4);
+            z-index: 11000;
+            cursor: se-resize;
+        }
     </style>
 </head>
 <body>
@@ -510,6 +552,19 @@ function postProcessHtml(html) {
             <div class="color-picker-group">
                 <input type="color" id="text-color" value="#000000">
                 <span>Текст</span>
+            </div>
+            <div class="color-picker-group">
+                <select id="font-size-select">
+                    <option value="12px">12</option>
+                    <option value="14px">14</option>
+                    <option value="16px" selected>16</option>
+                    <option value="18px">18</option>
+                    <option value="20px">20</option>
+                    <option value="24px">24</option>
+                    <option value="28px">28</option>
+                    <option value="32px">32</option>
+                </select>
+                <span>Размер</span>
             </div>
         </div>
         
@@ -553,6 +608,8 @@ function postProcessHtml(html) {
         <kbd>Esc</kbd> снять выделение
     </div>
     
+    <div class="resize-touchbar" id="resize-touchbar"></div>
+    
     <script>
     (function() {
         // State
@@ -561,23 +618,66 @@ function postProcessHtml(html) {
         let history = [];
         let historyIndex = -1;
         const MAX_HISTORY = 50;
+
+        // Drag state for user-inserted blocks
+        let isDragging = false;
+        let dragElement = null;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let elemStartLeft = 0;
+        let elemStartTop = 0;
+
+        // Resize state for user-inserted blocks
+        let isResizing = false;
+        let resizeStartX = 0;
+        let resizeStartY = 0;
+        let resizeStartWidth = 0;
+        let resizeStartHeight = 0;
+        let resizeElement = null;
         
         // DOM
         const contentWrapper = document.getElementById('content-wrapper');
         const toggleBtn = document.getElementById('toggle-edit-btn');
         const bgColorInput = document.getElementById('bg-color');
         const textColorInput = document.getElementById('text-color');
+        const fontSizeSelect = document.getElementById('font-size-select');
         const undoBtn = document.getElementById('undo-btn');
         const redoBtn = document.getElementById('redo-btn');
         const downloadBtn = document.getElementById('download-btn');
         const colorPickerPopup = document.getElementById('color-picker-popup');
+        const resizeBar = document.getElementById('resize-touchbar');
         const popupBgColor = document.getElementById('popup-bg-color');
         const popupTextColor = document.getElementById('popup-text-color');
         const closePicker = document.getElementById('close-picker');
         
         // Initialize
         makeElementsEditable();
+        // Разрешаем редактирование текста во всём содержимом
+        if (contentWrapper) {
+            contentWrapper.contentEditable = 'true';
+        }
         saveToHistory();
+        
+        if (resizeBar) {
+            resizeBar.addEventListener('mousedown', (e) => {
+                if (!selectedElement || selectedElement.dataset.draggable !== 'true') return;
+
+                const rect = selectedElement.getBoundingClientRect();
+
+                isResizing = true;
+                resizeElement = selectedElement;
+                resizeStartX = e.clientX;
+                resizeStartY = e.clientY;
+                resizeStartWidth = rect.width;
+                resizeStartHeight = rect.height;
+
+                document.addEventListener('mousemove', onResizeMove);
+                document.addEventListener('mouseup', onResizeEnd);
+
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        }
         
         /**
          * Make elements editable
@@ -591,6 +691,8 @@ function postProcessHtml(html) {
                 '.ff0', '.ff1', '.ff2', '.ff3', '.ff4', '.ff5', // font spans
                 'span[style*="color"]',
                 'div[style*="background"]',
+                'h1, h2, h3, h4, h5, h6',
+                'p', 'ul', 'li',
                 '.pc', '.pf', // page containers
                 'svg rect', 'svg path', 'svg polygon', 'svg circle'
             ];
@@ -604,6 +706,10 @@ function postProcessHtml(html) {
                 }
                 
                 el.classList.add('editable-element');
+                // Разрешаем прямое редактирование текста для не-SVG элементов
+                if (!(el.tagName === 'rect' || el.tagName === 'path' || el.tagName === 'polygon' || el.tagName === 'circle')) {
+                    el.contentEditable = 'true';
+                }
                 
                 // Store original styles
                 const computed = getComputedStyle(el);
@@ -617,6 +723,38 @@ function postProcessHtml(html) {
             });
             
             console.log('✅ Made', elements.length, 'elements editable');
+            attachDeleteHandles();
+        }
+
+        function attachDeleteHandles() {
+            const elements = contentWrapper.querySelectorAll('.editable-element');
+            elements.forEach(el => {
+                if (el.querySelector('.editable-delete')) return;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'editable-delete';
+                btn.textContent = '×';
+                btn.setAttribute('aria-label', 'Удалить блок');
+                btn.contentEditable = 'false';
+
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (selectedElement === el) {
+                        deselectAll();
+                    }
+                    el.remove();
+                    saveToHistory();
+                });
+
+                const computedPos = getComputedStyle(el).position;
+                if (computedPos === 'static') {
+                    el.style.position = 'relative';
+                }
+
+                el.appendChild(btn);
+            });
         }
         
         /**
@@ -668,6 +806,28 @@ function postProcessHtml(html) {
             textColorInput.value = textColor || '#000000';
             popupBgColor.value = bgColor || '#ffffff';
             popupTextColor.value = textColor || '#000000';
+
+            if (fontSizeSelect) {
+                const computedSize = getComputedStyle(el).fontSize || '16px';
+                fontSizeSelect.value = computedSize;
+            }
+            
+            updateResizeBarPosition();
+            placeCaretAtEnd(el);
+        }
+
+        function placeCaretAtEnd(el) {
+            if (!el) return;
+            if (typeof el.focus === 'function') {
+                el.focus();
+            }
+            const selection = window.getSelection && window.getSelection();
+            if (!selection || !document.createRange) return;
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
         }
         
         /**
@@ -678,6 +838,9 @@ function postProcessHtml(html) {
                 el.classList.remove('selected');
             });
             selectedElement = null;
+            if (resizeBar) {
+                resizeBar.style.display = 'none';
+            }
         }
         
         /**
@@ -710,6 +873,33 @@ function postProcessHtml(html) {
         }
         
         closePicker.addEventListener('click', hideColorPicker);
+        
+        function updateResizeBarPosition() {
+            if (!resizeBar) return;
+            if (!selectedElement || selectedElement.dataset.draggable !== 'true') {
+                resizeBar.style.display = 'none';
+                return;
+            }
+            
+            resizeBar.style.display = 'block';
+            
+            const rect = selectedElement.getBoundingClientRect();
+            const barRect = resizeBar.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            let left = rect.left + rect.width / 2 - barRect.width / 2;
+            let top = rect.bottom + 8;
+            
+            if (top + barRect.height > viewportHeight - 8) {
+                top = rect.top - barRect.height - 8;
+            }
+            
+            left = Math.max(8, Math.min(viewportWidth - barRect.width - 8, left));
+            
+            resizeBar.style.left = left + 'px';
+            resizeBar.style.top = top + 'px';
+        }
         
         /**
          * Apply background color
@@ -747,6 +937,16 @@ function postProcessHtml(html) {
                 });
             }
         }
+
+        function applyFontSize(size) {
+            if (!selectedElement) return;
+            saveToHistory();
+
+            selectedElement.style.fontSize = size;
+            selectedElement.querySelectorAll('span, .t, .c').forEach(child => {
+                child.style.fontSize = size;
+            });
+        }
         
         // Color input handlers
         bgColorInput.addEventListener('input', (e) => applyBgColor(e.target.value));
@@ -759,6 +959,12 @@ function postProcessHtml(html) {
             textColorInput.value = e.target.value;
             applyTextColor(e.target.value);
         });
+
+        if (fontSizeSelect) {
+            fontSizeSelect.addEventListener('change', (e) => {
+                applyFontSize(e.target.value);
+            });
+        }
         
         /**
          * Ensure text contrast (WCAG AA)
@@ -892,6 +1098,97 @@ function postProcessHtml(html) {
                 hideColorPicker();
             }
         });
+
+        // Drag handlers for draggable elements (user-inserted blocks)
+        contentWrapper.addEventListener('mousedown', (e) => {
+            if (!isEditMode) return;
+            if (resizeBar && (e.target === resizeBar || resizeBar.contains(e.target))) return;
+            const target = e.target.closest('.editable-element');
+            if (!target || target.dataset.draggable !== 'true') return;
+
+            e.preventDefault();
+
+            const parent = target.parentElement;
+            if (!parent) return;
+
+            const rect = target.getBoundingClientRect();
+            const parentRect = parent.getBoundingClientRect();
+
+            isDragging = true;
+            dragElement = target;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+
+            const currentLeft = parseFloat(target.style.left);
+            const currentTop = parseFloat(target.style.top);
+            if (!isNaN(currentLeft) && !isNaN(currentTop)) {
+                elemStartLeft = currentLeft;
+                elemStartTop = currentTop;
+            } else {
+                elemStartLeft = ((rect.left - parentRect.left) / parentRect.width) * 100;
+                elemStartTop = ((rect.top - parentRect.top) / parentRect.height) * 100;
+            }
+
+            document.addEventListener('mousemove', onDragMove);
+            document.addEventListener('mouseup', onDragEnd);
+        });
+
+        function onDragMove(e) {
+            if (!isDragging || !dragElement) return;
+            const parent = dragElement.parentElement;
+            if (!parent) return;
+
+            const parentRect = parent.getBoundingClientRect();
+            const dx = e.clientX - dragStartX;
+            const dy = e.clientY - dragStartY;
+
+            let newLeft = elemStartLeft + (dx / parentRect.width) * 100;
+            let newTop = elemStartTop + (dy / parentRect.height) * 100;
+
+            newLeft = Math.max(0, Math.min(100, newLeft));
+            newTop = Math.max(0, Math.min(100, newTop));
+
+            dragElement.style.left = newLeft + '%';
+            dragElement.style.top = newTop + '%';
+        }
+
+        function onDragEnd() {
+            if (!isDragging || !dragElement) return;
+            isDragging = false;
+            dragElement = null;
+            document.removeEventListener('mousemove', onDragMove);
+            document.removeEventListener('mouseup', onDragEnd);
+            saveToHistory();
+            updateResizeBarPosition();
+        }
+
+        function onResizeMove(e) {
+            if (!isResizing || !resizeElement) return;
+
+            const dx = e.clientX - resizeStartX;
+            const dy = e.clientY - resizeStartY;
+
+            const widthFactor = (resizeStartWidth + dx) / resizeStartWidth;
+            const heightFactor = (resizeStartHeight + dy) / resizeStartHeight;
+
+            let factor = Math.max(widthFactor, heightFactor);
+            factor = Math.max(0.5, Math.min(2.0, factor));
+
+            resizeElement.style.transformOrigin = 'top left';
+            resizeElement.style.transform = 'scale(' + factor + ')';
+            resizeElement.dataset.scale = String(factor);
+
+            updateResizeBarPosition();
+        }
+
+        function onResizeEnd() {
+            if (!isResizing || !resizeElement) return;
+            isResizing = false;
+            resizeElement = null;
+            document.removeEventListener('mousemove', onResizeMove);
+            document.removeEventListener('mouseup', onResizeEnd);
+            saveToHistory();
+        }
         
         /**
          * Download HTML
@@ -963,7 +1260,7 @@ function postProcessHtml(html) {
                     el = document.createElement('p');
                     el.textContent = 'Новый абзац текста. Замените этот текст на свой.';
                     break;
-                case 'bulleted-list':
+                case 'bulleted-list': {
                     el = document.createElement('ul');
                     var li1 = document.createElement('li');
                     li1.textContent = 'Пункт списка 1';
@@ -972,7 +1269,8 @@ function postProcessHtml(html) {
                     el.appendChild(li1);
                     el.appendChild(li2);
                     break;
-                case 'highlight-box':
+                }
+                case 'highlight-box': {
                     el = document.createElement('div');
                     el.style.margin = '12px 0';
                     el.style.padding = '12px 16px';
@@ -980,12 +1278,161 @@ function postProcessHtml(html) {
                     el.style.borderRadius = '8px';
                     el.textContent = 'Важный блок. Используйте его для выделения ключевой информации.';
                     break;
+                }
+                case 'image-box': {
+                    el = document.createElement('div');
+                    el.style.width = '140px';
+                    el.style.height = '140px';
+                    el.style.borderRadius = '12px';
+                    el.style.border = '2px dashed #9ca3af';
+                    el.style.background = '#f9fafb';
+                    el.style.display = 'flex';
+                    el.style.alignItems = 'center';
+                    el.style.justifyContent = 'center';
+                    el.style.overflow = 'hidden';
+
+                    var label = document.createElement('span');
+                    label.textContent = 'Нажми, чтобы добавить фото';
+                    label.style.fontSize = '11px';
+                    label.style.color = '#6b7280';
+                    label.style.textAlign = 'center';
+                    label.style.padding = '8px';
+                    label.style.pointerEvents = 'none';
+
+                    el.appendChild(label);
+
+                    el.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        var input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/*';
+                        input.style.display = 'none';
+                        input.addEventListener('change', function () {
+                            var file = input.files && input.files[0];
+                            if (!file) return;
+                            var reader = new FileReader();
+                            reader.onload = function (ev) {
+                                el.innerHTML = '';
+                                var img = document.createElement('img');
+                                img.src = ev.target && ev.target.result ? ev.target.result : '';
+                                img.style.width = '100%';
+                                img.style.height = '100%';
+                                img.style.objectFit = 'cover';
+                                el.appendChild(img);
+                                saveToHistory();
+                            };
+                            reader.readAsDataURL(file);
+                        });
+                        document.body.appendChild(input);
+                        input.click();
+                        setTimeout(function () { input.remove(); }, 0);
+                    });
+                    break;
+                }
+                case 'tag-pill': {
+                    el = document.createElement('span');
+                    el.textContent = 'Новый тег';
+                    el.style.display = 'inline-block';
+                    el.style.padding = '4px 10px';
+                    el.style.borderRadius = '999px';
+                    el.style.background = '#e0f2fe';
+                    el.style.color = '#0369a1';
+                    el.style.fontSize = '11px';
+                    el.style.fontWeight = '500';
+                    break;
+                }
             }
             if (!el) return;
             el.classList.add('editable-element');
-            contentWrapper.appendChild(el);
+            // mark as draggable overlay block
+            el.dataset.draggable = 'true';
+
+            // Insert into the main PDF page container so it appears on the canvas
+            var targetContainer = null;
+            var pageCandidates = contentWrapper.querySelectorAll('#page-container, .pc, .pf');
+            if (pageCandidates.length > 0) {
+                // Use the last page so new content appears on the last visible sheet
+                targetContainer = pageCandidates[pageCandidates.length - 1];
+            } else {
+                targetContainer = contentWrapper.firstElementChild || contentWrapper;
+            }
+
+            // Ensure relative positioning so absolutely positioned overlays anchor correctly
+            var currentPos = window.getComputedStyle(targetContainer).position;
+            if (!currentPos || currentPos === 'static') {
+                targetContainer.style.position = 'relative';
+            }
+
+            // Overlay new element on the page instead of pushing content down
+            el.style.position = 'absolute';
+            el.style.left = '10%';
+            el.style.top = '10%';
+            el.style.maxWidth = '80%';
+
+            targetContainer.appendChild(el);
             makeElementsEditable();
             deselectAll();
+            selectElement(el);
+            if (typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            hideColorPicker();
+            saveToHistory();
+        }
+        
+        function insertAssessmentResult(data) {
+            var el = document.createElement('div');
+            el.className = 'editable-element';
+            el.dataset.draggable = 'true';
+
+            var targetContainer = null;
+            var pageCandidates = contentWrapper.querySelectorAll('#page-container, .pc, .pf');
+            if (pageCandidates.length > 0) {
+                targetContainer = pageCandidates[pageCandidates.length - 1];
+            } else {
+                targetContainer = contentWrapper.firstElementChild || contentWrapper;
+            }
+
+            var currentPos = window.getComputedStyle(targetContainer).position;
+            if (!currentPos || currentPos === 'static') {
+                targetContainer.style.position = 'relative';
+            }
+
+            el.style.position = 'absolute';
+            el.style.left = '8%';
+            el.style.top = '8%';
+            el.style.maxWidth = '84%';
+            el.style.padding = '14px 18px';
+            el.style.background = '#ecfdf5';
+            el.style.border = '1px solid #6ee7b7';
+            el.style.borderRadius = '10px';
+            el.style.fontSize = '13px';
+
+            var title = document.createElement('div');
+            title.textContent = 'Результаты AI-теста на профпригодность';
+            title.style.fontWeight = '600';
+            title.style.marginBottom = '6px';
+
+            var summary = document.createElement('div');
+            summary.textContent = data && data.summary ? data.summary : '';
+            summary.style.marginBottom = '4px';
+
+            var hint = document.createElement('div');
+            hint.textContent = 'Совет: отметьте в резюме сильные стороны и области для развития на основе этого теста.';
+            hint.style.fontSize = '12px';
+            hint.style.color = '#4b5563';
+
+            el.appendChild(title);
+            if (data && data.summary) el.appendChild(summary);
+            el.appendChild(hint);
+
+            targetContainer.appendChild(el);
+            makeElementsEditable();
+            deselectAll();
+            selectElement(el);
+            if (typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
             hideColorPicker();
             saveToHistory();
         }
@@ -1010,8 +1457,16 @@ function postProcessHtml(html) {
                 case 'insert-element':
                     insertElementFromParent(data.elementType);
                     break;
+                case 'insert-assessment-result':
+                    insertAssessmentResult(data.result);
+                    break;
+                case 'insert-assessment-result':
+                    insertAssessmentResult(data.result);
+                    break;
             }
         });
+        
+        window.addEventListener('resize', updateResizeBarPosition);
         
         console.log('🎨 pdf2htmlEX color editor initialized');
     })();
