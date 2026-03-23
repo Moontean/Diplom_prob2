@@ -96,19 +96,17 @@ async function convertPdfToHtml(pdfPath, options = {}) {
                 '-v', `${dockerPdfDir}:/pdf:ro`,
                 '-v', `${dockerOutputDir}:/output`,
                 DOCKER_IMAGE,
-                '--zoom', zoom.toString(),
-                '--embed-font', embedFont ? '1' : '0',
-                '--embed-image', embedImage ? '1' : '0',
-                '--embed-css', embedCss ? '1' : '0',
-                '--embed-javascript', embedJs ? '1' : '0',
-                '--split-pages', splitPages ? '1' : '0',
-                '--process-outline', '0',
-                '--printing', '0',
-                '--dest-dir', '/output',
+                `--zoom=${zoom}`,
+                embedFont ? '--embed-font=1' : '--embed-font=0',
+                embedImage ? '--embed-image=1' : '--embed-image=0',
+                embedCss ? '--embed-css=1' : '--embed-css=0',
+                embedJs ? '--embed-javascript=1' : '--embed-javascript=0',
+                splitPages ? '--split-pages=1' : '--split-pages=0',
+                '--process-outline=0',
+                '--printing=0',
+                '--dest-dir=/output',
                 `/pdf/${pdfFileName}`
             ];
-
-            console.log('🐳 Docker command: docker', dockerArgs.join(' '));
 
             result = await new Promise((resolve, reject) => {
                 const proc = spawn('docker', dockerArgs);
@@ -117,24 +115,22 @@ async function convertPdfToHtml(pdfPath, options = {}) {
 
                 proc.stdout.on('data', (data) => {
                     stdout += data.toString();
-                    console.log('pdf2htmlEX:', data.toString());
                 });
 
                 proc.stderr.on('data', (data) => {
                     stderr += data.toString();
-                    console.log('pdf2htmlEX stderr:', data.toString());
                 });
 
                 proc.on('close', (code) => {
                     if (code === 0) {
                         resolve({ stdout, stderr });
                     } else {
-                        reject(new Error(`Docker pdf2htmlEX exited with code ${code}: ${stderr}`));
+                        reject(new Error(`pdf2htmlEX (Docker) exited with code ${code}: ${stderr}`));
                     }
                 });
 
                 proc.on('error', (err) => {
-                    reject(new Error(`Docker error: ${err.message}`));
+                    reject(err);
                 });
             });
         } else {
@@ -1083,56 +1079,6 @@ function postProcessHtml(html) {
         undoBtn.addEventListener('click', undo);
         redoBtn.addEventListener('click', redo);
         
-        /**
-         * Keyboard shortcuts
-         */
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'z') {
-                e.preventDefault();
-                undo();
-            } else if (e.ctrlKey && e.key === 'y') {
-                e.preventDefault();
-                redo();
-            } else if (e.key === 'Escape') {
-                deselectAll();
-                hideColorPicker();
-            }
-        });
-
-        // Drag handlers for draggable elements (user-inserted blocks)
-        contentWrapper.addEventListener('mousedown', (e) => {
-            if (!isEditMode) return;
-            if (resizeBar && (e.target === resizeBar || resizeBar.contains(e.target))) return;
-            const target = e.target.closest('.editable-element');
-            if (!target || target.dataset.draggable !== 'true') return;
-
-            e.preventDefault();
-
-            const parent = target.parentElement;
-            if (!parent) return;
-
-            const rect = target.getBoundingClientRect();
-            const parentRect = parent.getBoundingClientRect();
-
-            isDragging = true;
-            dragElement = target;
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
-
-            const currentLeft = parseFloat(target.style.left);
-            const currentTop = parseFloat(target.style.top);
-            if (!isNaN(currentLeft) && !isNaN(currentTop)) {
-                elemStartLeft = currentLeft;
-                elemStartTop = currentTop;
-            } else {
-                elemStartLeft = ((rect.left - parentRect.left) / parentRect.width) * 100;
-                elemStartTop = ((rect.top - parentRect.top) / parentRect.height) * 100;
-            }
-
-            document.addEventListener('mousemove', onDragMove);
-            document.addEventListener('mouseup', onDragEnd);
-        });
-
         function onDragMove(e) {
             if (!isDragging || !dragElement) return;
             const parent = dragElement.parentElement;
@@ -1220,16 +1166,26 @@ function postProcessHtml(html) {
 \${clone.innerHTML}
 </body>
 </html>\`;
-            
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'edited-document.html';
-            a.click();
-            
-            URL.revokeObjectURL(url);
+
+            // If running inside the pdf-converter iframe, let parent handle download
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'download-ready',
+                    html: htmlContent,
+                    fileName: 'resume-template.html'
+                }, '*');
+            } else {
+                // Fallback: direct download when opened standalone
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'edited-document.html';
+                a.click();
+
+                URL.revokeObjectURL(url);
+            }
         });
         
         /**
