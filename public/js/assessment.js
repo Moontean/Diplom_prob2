@@ -1,4 +1,4 @@
-(function(){
+(function () {
   const genForm = document.getElementById('genForm');
   const genBtn = document.getElementById('genBtn');
   const genStatus = document.getElementById('genStatus');
@@ -12,6 +12,7 @@
 
   const resultWrap = document.getElementById('resultWrap');
   const scoreText = document.getElementById('scoreText');
+  const scoreHint = document.getElementById('scoreHint');
   const saveResultBtn = document.getElementById('saveResultBtn');
   const saveResultStatus = document.getElementById('saveResultStatus');
   const breakdownEl = document.getElementById('breakdown');
@@ -21,14 +22,14 @@
   let currentMeta = { profession: '', difficulty: '', numQuestions: 0 };
   let lastResult = null;
 
-  function normalizeQuestions(questions){
+  function normalizeQuestions(questions) {
     const out = [];
-    (questions||[]).forEach(q => {
+    (questions || []).forEach(q => {
       if (!q || !q.prompt) return;
       const prompt = String(q.prompt).trim();
       if (!prompt) return;
       if (q.type === 'mcq') {
-        const opts = (Array.isArray(q.options)? q.options: []).map(o => String(o||'').trim()).filter(Boolean);
+        const opts = (Array.isArray(q.options) ? q.options : []).map(o => String(o || '').trim()).filter(Boolean);
         if (opts.length < 2) return; // пропускаем пустые вопросы
         out.push({ id: q.id, type: 'mcq', prompt, options: opts });
       } else if (q.type === 'open') {
@@ -57,14 +58,14 @@
     }
   }
 
-  function renderQuestions(questions){
+  function renderQuestions(questions) {
     questionsEl.innerHTML = '';
     questions.forEach((q, idx) => {
       const wrap = document.createElement('div');
-      wrap.className = 'border rounded p-3';
+      wrap.className = 'rounded-2xl border border-gray-200 bg-gray-50/80 p-4 hover:border-blue-200 transition';
       const title = document.createElement('div');
-      title.className = 'font-medium';
-      title.textContent = `${idx+1}. ${q.prompt}`;
+      title.className = 'font-medium text-gray-900';
+      title.textContent = `${idx + 1}. ${q.prompt}`;
       wrap.appendChild(title);
 
       if (q.type === 'mcq' && Array.isArray(q.options)) {
@@ -74,16 +75,16 @@
           const id = `${q.id}_${i}`;
           const label = document.createElement('label');
           label.className = 'flex items-center gap-2';
-          label.innerHTML = `<input type="radio" name="${q.id}" value="${i}" id="${id}"> <span>${opt}</span>`;
+          label.innerHTML = `<input type="radio" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500" name="${q.id}" value="${i}" id="${id}"> <span class="text-sm text-gray-800">${opt}</span>`;
           list.appendChild(label);
         });
         wrap.appendChild(list);
       } else if (q.type === 'open') {
         const ta = document.createElement('textarea');
-        ta.className = 'mt-2 w-full border rounded px-3 py-2';
+        ta.className = 'mt-3 w-full border rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500';
         ta.rows = 4;
         ta.name = q.id;
-        ta.placeholder = 'Ваш ответ...';
+        ta.placeholder = 'Ваш подробный ответ...';
         wrap.appendChild(ta);
       }
 
@@ -91,7 +92,7 @@
     });
   }
 
-  function collectAnswers(){
+  function collectAnswers() {
     const answers = [];
     currentQuestions.forEach(q => {
       if (q.type === 'mcq') {
@@ -105,10 +106,26 @@
     return answers;
   }
 
-  function renderResult(res){
+  function renderResult(res) {
     resultWrap.classList.remove('hidden');
     const pct = Math.round((res.score || 0) * 100);
     scoreText.textContent = `Итоговый результат: ${pct}%`;
+
+    // Цвет и подсказка для интерпретации результата
+    const toneClass = pct >= 75 ? 'text-emerald-600' : (pct >= 50 ? 'text-amber-600' : 'text-rose-600');
+    scoreText.classList.remove('text-emerald-600', 'text-amber-600', 'text-rose-600');
+    scoreText.classList.add(toneClass);
+    if (scoreHint) {
+      let hint = '';
+      if (pct < 50) {
+        hint = 'Есть над чем поработать — обрати внимание на слабые места и усили своё резюме по этой профессии.';
+      } else if (pct < 75) {
+        hint = 'Неплохой результат! Ты уже на правильном пути, но ещё есть зоны роста.';
+      } else {
+        hint = 'Отличный результат — твой профиль хорошо совпадает с выбранной профессией.';
+      }
+      scoreHint.textContent = hint;
+    }
     lastResult = {
       assessmentId: currentAssessmentId,
       profession: currentMeta.profession,
@@ -130,11 +147,11 @@
 
     // Диаграмма качества: зелёный (полностью верно), жёлтый (частично), красный (неверно)
     const total = (res.breakdown || []).length || 1;
-    const greenCount = (res.breakdown || []).filter(b => (b.type==='mcq' && (b.score||0) >= 1) || (b.type==='open' && (b.score||0) >= 0.99)).length;
-    const yellowCount = (res.breakdown || []).filter(b => (b.type==='open' && (b.score||0) > 0 && (b.score||0) < 0.99)).length;
+    const greenCount = (res.breakdown || []).filter(b => (b.type === 'mcq' && (b.score || 0) >= 1) || (b.type === 'open' && (b.score || 0) >= 0.99)).length;
+    const yellowCount = (res.breakdown || []).filter(b => (b.type === 'open' && (b.score || 0) > 0 && (b.score || 0) < 0.99)).length;
     const redCount = Math.max(0, total - greenCount - yellowCount);
-    const greenPct = Math.round(greenCount*100/total);
-    const yellowPct = Math.round(yellowCount*100/total);
+    const greenPct = Math.round(greenCount * 100 / total);
+    const yellowPct = Math.round(yellowCount * 100 / total);
     const redPct = 100 - greenPct - yellowPct;
     const chart = document.getElementById('qualityChart');
     const legend = document.getElementById('qualityLegend');
@@ -160,11 +177,18 @@
     breakdownEl.innerHTML = '';
     (res.breakdown || []).forEach(item => {
       const row = document.createElement('div');
-      row.className = 'text-sm text-gray-700';
+      row.className = 'flex gap-3 items-start rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800';
       let tag = '';
       if (item.type === 'mcq') tag = item.correct ? '✅' : '❌';
-      else tag = `📝 ${Math.round((item.score||0)*100)}%`;
-      row.textContent = `${tag} ${item.id}: ${item.reasoning||''}`;
+      else tag = `📝 ${Math.round((item.score || 0) * 100)}%`;
+
+      row.innerHTML = `
+        <div class="shrink-0 text-lg leading-none pt-0.5">${tag}</div>
+        <div class="flex-1">
+          <div class="font-medium text-gray-900">${item.id}</div>
+          <div class="text-xs text-gray-600 mt-0.5">${item.reasoning || ''}</div>
+        </div>
+      `;
       breakdownEl.appendChild(row);
     });
 
@@ -172,7 +196,7 @@
     try {
       location.hash = '#resultWrap';
       resultWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (_) {}
+    } catch (_) { }
   }
 
   genForm.addEventListener('submit', async (e) => {
@@ -209,7 +233,27 @@
       currentAssessmentId = j.assessmentId;
       currentQuestions = normalizeQuestions(j.questions || []);
       renderQuestions(currentQuestions);
-      testMeta.textContent = `${profession} • ${difficulty} • ${currentQuestions.length} вопросов`;
+
+      const diffLabelMap = { junior: 'Junior', middle: 'Middle', senior: 'Senior' };
+      const diffClassMap = {
+        junior: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        middle: 'bg-blue-50 text-blue-700 border-blue-200',
+        senior: 'bg-purple-50 text-purple-700 border-purple-200'
+      };
+      const diffClass = diffClassMap[difficulty] || 'bg-gray-50 text-gray-700 border-gray-200';
+      const diffLabel = diffLabelMap[difficulty] || difficulty;
+
+      testMeta.innerHTML = `
+        <div class="flex flex-col items-end gap-1 text-xs text-gray-500">
+          <span class="font-medium text-gray-900">${profession}</span>
+          <div class="inline-flex items-center gap-2">
+            <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${diffClass}">
+              Уровень: ${diffLabel}
+            </span>
+            <span>${currentQuestions.length} вопросов</span>
+          </div>
+        </div>
+      `;
       testWrap.classList.remove('hidden');
       genStatus.textContent = 'Готово';
     } catch (err) {

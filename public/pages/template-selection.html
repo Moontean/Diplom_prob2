@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Выбор шаблона резюме</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .template-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .template-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .template-card.selected {
+            border: 3px solid #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-2xl font-bold text-gray-900">Выберите шаблон резюме</h1>
+                <a href="/pages/index.html" class="text-gray-600 hover:text-gray-900 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" class="w-5 h-5">
+                        <path fill="currentColor"
+                            d="m313-440 224 224-57 56-320-320 320-320 57 56-224 224h487v80H313Z" />
+                    </svg>
+                    Назад
+                </a>
+            </div>
+            <p class="text-gray-600 mt-2">Выберите дизайн, который лучше всего подходит для вашей карьеры</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <!-- Template 1: Experienced -->
+            <div class="template-card bg-white rounded-lg shadow-md overflow-hidden" data-template="experienced">
+                <div class="aspect-[8.5/11] bg-gray-100 relative overflow-hidden">
+                    <iframe src="/cv_templates/free-experienced-template-resume.pdf"
+                        class="w-full h-full pointer-events-none"
+                        style="transform: scale(0.7); transform-origin: top left; width: 142.85%; height: 142.85%;">
+                    </iframe>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Профессиональный</h3>
+                    <p class="text-sm text-gray-600 mb-4">Идеален для опытных специалистов. Современный дизайн с
+                        акцентом на достижения.</p>
+                    <button
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors select-template-btn"
+                        data-template="experienced">
+                        Использовать этот шаблон
+                    </button>
+                </div>
+            </div>
+
+            <!-- Template 2: Entry Level -->
+            <div class="template-card bg-white rounded-lg shadow-md overflow-hidden" data-template="entry-level">
+                <div class="aspect-[8.5/11] bg-gray-100 relative overflow-hidden">
+                    <iframe src="/cv_templates/free-resume-example-entry-level.pdf"
+                        class="w-full h-full pointer-events-none"
+                        style="transform: scale(0.7); transform-origin: top left; width: 142.85%; height: 142.85%;">
+                    </iframe>
+                </div>
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Начальный уровень</h3>
+                    <p class="text-sm text-gray-600 mb-4">Отлично подходит для выпускников и начинающих специалистов.
+                        Чистый и простой дизайн.</p>
+                    <button
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors select-template-btn"
+                        data-template="entry-level">
+                        Использовать этот шаблон
+                    </button>
+                </div>
+            </div>
+
+            <!-- Blank Template (existing builder) -->
+            <div class="template-card bg-white rounded-lg shadow-md overflow-hidden" data-template="custom">
+                <div class="aspect-[8.5/11] bg-gray-100 flex items-center justify-center">
+                    <div class="text-center p-8">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"
+                            class="w-24 h-24 mx-auto text-gray-400 mb-4">
+                            <path fill="currentColor"
+                                d="M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z" />
+                        </svg>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Создать с нуля</h3>
+                        <p class="text-sm text-gray-600 mb-4">Полная свобода дизайна. Создайте уникальное резюме с
+                            помощью нашего конструктора.</p>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <button
+                        class="w-full bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-4 rounded-lg transition-colors select-template-btn"
+                        data-template="custom">
+                        Начать с чистого листа
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="mt-16 bg-blue-50 rounded-lg p-8">
+            <div class="max-w-3xl mx-auto text-center">
+                <h2 class="text-2xl font-bold text-gray-900 mb-4">Как это работает?</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                    <div>
+                        <div
+                            class="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3">
+                            1</div>
+                        <h3 class="font-semibold text-gray-900 mb-2">Выберите шаблон</h3>
+                        <p class="text-sm text-gray-600">Просмотрите наши профессиональные шаблоны и выберите подходящий
+                        </p>
+                    </div>
+                    <div>
+                        <div
+                            class="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3">
+                            2</div>
+                        <h3 class="font-semibold text-gray-900 mb-2">Заполните данные</h3>
+                        <p class="text-sm text-gray-600">Введите свою информацию в удобный конструктор</p>
+                    </div>
+                    <div>
+                        <div
+                            class="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-3">
+                            3</div>
+                        <h3 class="font-semibold text-gray-900 mb-2">Скачайте резюме</h3>
+                        <p class="text-sm text-gray-600">Получите готовое резюме в формате PDF или DOCX</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Handle template selection
+        document.querySelectorAll('.select-template-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const template = e.target.dataset.template;
+                // Redirect to PDF converter with template parameter
+                window.location.href = `/pages/pdf-converter?template=${template}`;
+            });
+        });
+
+        // Visual selection feedback
+        document.querySelectorAll('.template-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Remove selection from all cards
+                document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+                // Add selection to clicked card
+                card.classList.add('selected');
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -150,7 +150,7 @@ function updateNavForAuthenticatedUser(user) {
           </div>
         </div>
       </div>
-      <a class="btn btn-primary cta" href="/pages/cv-builder">Создать резюме</a>
+      <a class="btn btn-primary cta" href="/pages/templates">Создать резюме</a>
     `;
     
     // Добавляем обработчик для нового dropdown

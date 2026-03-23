@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Авторизация — CV Builder</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
+
 <body id="root">
 
   <!-- НАВИГАЦИЯ -->
@@ -16,7 +18,7 @@
           <span class="brand-text">CV Builder</span>
         </div>
       </a>
-      
+
       <div class="nav-menu">
         <div class="nav-dropdown">
           <button class="nav-dropdown-btn" type="button">
@@ -41,10 +43,10 @@
         <a class="nav-link" href="/pages/pricing">Цены</a>
         <a class="nav-link" href="/pages/faq">Часто задаваемые вопросы</a>
       </div>
-      
+
       <div class="nav-actions">
         <a class="btn btn-outline" href="/pages/register">Регистрация</a>
-        <a class="btn btn-primary cta" href="/pages/cv-builder">Создать резюме</a>
+        <a class="btn btn-primary cta" href="/pages/pdf-converter">Создать резюме</a>
       </div>
     </div>
   </nav>
@@ -52,15 +54,17 @@
   <!-- ОСНОВНОЙ КОНТЕНТ -->
   <main class="main-content">
     <div class="container" style="padding: 100px 20px; min-height: 80vh; max-width: 450px; margin: 0 auto;">
-      
-      <div class="auth-container" style="background: white; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); padding: 3rem;">
+
+      <div class="auth-container"
+        style="background: white; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); padding: 3rem;">
         <div style="text-align: center; margin-bottom: 2rem;">
           <h1 style="color: #111827; font-size: 2rem; margin-bottom: 0.5rem;">Добро пожаловать</h1>
           <p style="color: #6b7280; font-size: 1rem;">Войдите в свой аккаунт CV Builder</p>
         </div>
 
         <!-- Уведомления -->
-        <div id="notification" style="display: none; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; font-weight: 500;"></div>
+        <div id="notification"
+          style="display: none; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; font-weight: 500;"></div>
 
         <!-- Форма входа -->
         <form id="loginForm">
@@ -68,30 +72,18 @@
             <label for="email" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
               Email адрес
             </label>
-            <input 
-              type="email" 
-              id="email" 
-              name="email" 
-              required
+            <input type="email" id="email" name="email" required
               style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
-              onfocus="this.style.borderColor='#3b82f6'"
-              onblur="this.style.borderColor='#d1d5db'"
-            >
+              onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'">
           </div>
 
           <div style="margin-bottom: 1.5rem;">
             <label for="password" style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
               Пароль
             </label>
-            <input 
-              type="password" 
-              id="password" 
-              name="password" 
-              required
+            <input type="password" id="password" name="password" required
               style="width: 100%; padding: 0.875rem; border: 2px solid #d1d5db; border-radius: 0.5rem; font-size: 1rem; transition: border-color 0.2s;"
-              onfocus="this.style.borderColor='#3b82f6'"
-              onblur="this.style.borderColor='#d1d5db'"
-            >
+              onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'">
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
@@ -104,23 +96,19 @@
             </a>
           </div>
 
-          <button 
-            type="submit" 
-            class="btn btn-primary" 
-            style="width: 100%; padding: 1rem; font-size: 1rem; margin-bottom: 1.5rem;"
-            id="submitBtn"
-          >
+          <button type="submit" class="btn btn-primary"
+            style="width: 100%; padding: 1rem; font-size: 1rem; margin-bottom: 1.5rem;" id="submitBtn">
             Войти
           </button>
 
           <div style="text-align: center;">
             <p style="color: #6b7280; margin-bottom: 1rem;">
-              Нет аккаунта? 
+              Нет аккаунта?
               <a href="/pages/register" style="color: #3b82f6; font-weight: 600; text-decoration: underline;">
                 Создать аккаунт
               </a>
             </p>
-            
+
             <div style="border-top: 1px solid #e5e7eb; padding-top: 1rem;">
               <a href="/" style="color: #6b7280; text-decoration: underline; font-size: 0.875rem;">
                 ← Вернуться на главную
@@ -138,7 +126,7 @@
       try {
         const response = await fetch('/api/user');
         const result = await response.json();
-        
+
         if (result.authenticated) {
           window.location.href = '/pages/dashboard';
         }
@@ -146,28 +134,28 @@
         console.log('Не авторизован');
       }
     }
-    
+
     // Проверяем при загрузке страницы
     checkAuth();
-    
+
     // Получаем параметр next из URL
     const params = new URLSearchParams(window.location.search);
     const nextPage = params.get('next') || '/pages/dashboard';
-    
+
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      
+
       const submitBtn = document.getElementById('submitBtn');
       const notification = document.getElementById('notification');
-      
+
       // Получаем данные формы
       const formData = new FormData(e.target);
       const data = Object.fromEntries(formData);
-      
+
       // Блокируем кнопку
       submitBtn.disabled = true;
       submitBtn.textContent = 'Вход...';
-      
+
       try {
         const response = await fetch('/api/login', {
           method: 'POST',
@@ -176,9 +164,9 @@
           },
           body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
           showNotification(result.message, 'success');
           setTimeout(() => {
@@ -194,12 +182,12 @@
         submitBtn.textContent = 'Войти';
       }
     });
-    
+
     function showNotification(message, type) {
       const notification = document.getElementById('notification');
       notification.textContent = message;
       notification.style.display = 'block';
-      
+
       if (type === 'success') {
         notification.style.backgroundColor = '#dcfce7';
         notification.style.color = '#166534';
@@ -209,11 +197,12 @@
         notification.style.color = '#dc2626';
         notification.style.border = '1px solid #fecaca';
       }
-      
+
       setTimeout(() => {
         notification.style.display = 'none';
       }, 5000);
     }
   </script>
 </body>
+
 </html>

@@ -1,65 +1,367 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Предварительный просмотр резюме</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/tailwind.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: Inter, system-ui, sans-serif; }
-    .cv-card { background: var(--bg); border-radius: 1.5rem; padding: 2rem; }
-    .cv-card::selection { background: rgba(37,99,235,.15); }
-    .cv-body { display: flex; flex-direction: column; gap: 1.5rem; }
-    .cv-column { display: flex; flex-direction: column; gap: 1.25rem; }
-    .cv-left section, .cv-right section { padding: 0; border: none; }
-    .cv-title { font-size: 2rem; font-weight: 700; color: #0f172a; }
-    .cv-title-line { display: block; line-height: 1.1; }
-    .cv-header { background: var(--bg); }
-    .section-head { text-transform: none; letter-spacing: normal; }
-    .summary-text { font-size: 0.95rem; line-height: 1.6; color: #475569; }
-    .chip { display: inline-flex; align-items: center; justify-content: center; padding: 0.35rem 0.9rem; border-radius: 999px; font-size: 0.85rem; margin-right: 0.4rem; margin-bottom: 0.4rem; background: var(--chip-bg); border: 1px solid var(--chip-bd); }
-    .cv-left, .cv-right { width: 100%; }
+    body {
+      font-family: Inter, system-ui, sans-serif;
+    }
 
-    .tpl-modern { --accent:#2563eb; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(37,99,235,.08); --chip-bd:#bfdbfe; }
-    .tpl-classic { --accent:#111827; --bg:#ffffff; --muted:#4b5563; --chip-bg:#f3f4f6; --chip-bd:#e5e7eb; }
-    .tpl-minimal { --accent:#374151; --bg:#ffffff; --muted:#9ca3af; --chip-bg:#ffffff; --chip-bd:#e5e7eb; }
-    .tpl-creative { --accent:#7c3aed; --bg:#ffffff; --muted:#6b7280; --chip-bg:rgba(124,58,237,.08); --chip-bd:#c4b5fd; }
-    .tpl-european { --accent:#2f47a3; --bg:#ffffff; --muted:#7c88b0; --chip-bg:rgba(47,71,163,.08); --chip-bd:#c7cefb; }
-    .tpl-europass { --accent:#1f3c88; --bg:#ffffff; --muted:#647099; --chip-bg:rgba(31,60,136,.08); --chip-bd:#cfd6ff; }
+    .cv-card {
+      background: var(--bg);
+      border-radius: 1.5rem;
+      padding: 2rem;
+    }
 
-    .tpl-european .cv-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 2.25rem; }
-    .tpl-european .cv-left { background: #f4f6ff; border-radius: 1.5rem; padding: 1.75rem; box-shadow: inset 0 0 0 1px rgba(99,102,241,.08); }
-    .tpl-european .cv-header { margin-bottom: 0.5rem; padding-bottom: 0; }
-    .tpl-european .cv-title { font-size: 42px; letter-spacing: -0.03em; }
-    .tpl-european .cv-title-line + .cv-title-line { margin-top: -0.35rem; }
-    .tpl-european #cvPhotoWrap { width: 96px; height: 96px; border: 4px solid #fff; box-shadow: 0 12px 30px rgba(47,71,163,.25); }
-    .tpl-european .section-head { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: #94a3b8; }
-    .tpl-european #personalFields .muted { color: #94a3b8; }
-    .tpl-european #skillsList, .tpl-european #languagesList { display: block; }
+    .cv-card::selection {
+      background: rgba(37, 99, 235, .15);
+    }
 
-    .tpl-europass .cv-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 2.5rem; }
-    .tpl-europass .cv-left { background: linear-gradient(180deg, #f7f9ff 0%, #eef1ff 100%); border-radius: 1.75rem; padding: 1.8rem; box-shadow: inset 0 0 0 1px rgba(31,60,136,.12); }
-    .tpl-europass .cv-right { position: relative; padding-left: 2rem; }
-    .tpl-europass .cv-right::before { content: ''; position: absolute; left: 0.6rem; top: 0.75rem; bottom: 0.75rem; width: 2px; background: rgba(31,60,136,.25); }
-    .tpl-europass .cv-title { font-size: 40px; letter-spacing: -0.025em; }
-    .tpl-europass .cv-title-line + .cv-title-line { margin-top: -0.25rem; }
-    .tpl-europass #cvPhotoWrap { width: 110px; height: 110px; border: 5px solid #fff; box-shadow: 0 16px 35px rgba(15,23,42,.25); }
-    .tpl-europass .section-head { font-size: 0.78rem; letter-spacing: 0.32em; text-transform: uppercase; color: #95a3c5; }
-    .tpl-europass #employmentList > div,
-    .tpl-europass #educationList > div { position: relative; padding-left: 1.5rem; border: none; margin-bottom: 1.75rem; }
-    .tpl-europass #employmentList > div:last-child,
-    .tpl-europass #educationList > div:last-child { margin-bottom: 0; }
-    .tpl-europass #employmentList > div::before,
-    .tpl-europass #educationList > div::before { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 999px; border: 2px solid #fff; background: var(--accent); left: -0.95rem; top: 0.25rem; box-shadow: 0 4px 12px rgba(15,23,42,.18); }
+    .cv-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .cv-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .cv-left section,
+    .cv-right section {
+      padding: 0;
+      border: none;
+    }
+
+    .cv-title {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.01em;
+    }
+
+    .cv-title-line {
+      display: block;
+      line-height: 1.1;
+    }
+
+    .cv-header {
+      background: var(--bg);
+    }
+
+    .section-head {
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .summary-text {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #475569;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      margin-right: 0.4rem;
+      margin-bottom: 0.4rem;
+      background: var(--chip-bg);
+      border: 1px solid var(--chip-bd);
+    }
+
+    .cv-left,
+    .cv-right {
+      width: 100%;
+    }
+
+    .tpl-modern {
+      --accent: #2563eb;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --chip-bg: rgba(37, 99, 235, .08);
+      --chip-bd: #bfdbfe;
+    }
+
+    .tpl-classic {
+      --accent: #111827;
+      --bg: #ffffff;
+      --muted: #4b5563;
+      --chip-bg: #f3f4f6;
+      --chip-bd: #e5e7eb;
+    }
+
+    .tpl-minimal {
+      --accent: #374151;
+      --bg: #ffffff;
+      --muted: #9ca3af;
+      --chip-bg: #ffffff;
+      --chip-bd: #e5e7eb;
+    }
+
+    /* Уточнения под PDF-примеры для классического/минимального */
+    .tpl-classic .cv-header {
+      padding-bottom: 0.25rem;
+    }
+
+    .tpl-classic .cv-title {
+      font-size: 36px;
+      letter-spacing: -0.015em;
+    }
+
+    .tpl-minimal .cv-header {
+      padding-bottom: 0.25rem;
+    }
+
+    .tpl-minimal .cv-title {
+      font-size: 34px;
+      letter-spacing: 0;
+    }
+
+    .tpl-minimal .section-head,
+    .tpl-classic .section-head {
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .tpl-creative {
+      --accent: #7c3aed;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --chip-bg: rgba(124, 58, 237, .08);
+      --chip-bd: #c4b5fd;
+    }
+
+    .tpl-european {
+      --accent: #2f47a3;
+      --bg: #ffffff;
+      --muted: #7c88b0;
+      --chip-bg: rgba(47, 71, 163, .08);
+      --chip-bd: #c7cefb;
+    }
+
+    .tpl-europass {
+      --accent: #1f3c88;
+      --bg: #ffffff;
+      --muted: #647099;
+      --chip-bg: rgba(31, 60, 136, .08);
+      --chip-bd: #cfd6ff;
+    }
+
+    /* Чистый лист - пустой белый холст */
+    .tpl-blank {
+      --accent: #374151;
+      --bg: #ffffff;
+      --muted: #9ca3af;
+      --chip-bg: #ffffff;
+      --chip-bd: #e5e7eb;
+      min-height: 842px;
+      /* A4 height */
+      background: #ffffff;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }
+
+    .tpl-blank .cv-header,
+    .tpl-blank .cv-body {
+      display: none !important;
+    }
+
+    /* Быстрые цветовые схемы (поверх шаблона) */
+    .theme-blue {
+      --accent: #2563eb;
+      --chip-bg: rgba(37, 99, 235, .08);
+      --chip-bd: #bfdbfe;
+    }
+
+    .theme-emerald {
+      --accent: #059669;
+      --chip-bg: rgba(5, 150, 105, .08);
+      --chip-bd: #a7f3d0;
+    }
+
+    .theme-rose {
+      --accent: #e11d48;
+      --chip-bg: rgba(225, 29, 72, .08);
+      --chip-bd: #fecdd3;
+    }
+
+    /* Размер текста */
+    .font-small {
+      font-size: 14px;
+    }
+
+    .font-medium {
+      font-size: 16px;
+    }
+
+    .font-large {
+      font-size: 18px;
+    }
+
+    .tpl-european .cv-body {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 2.25rem;
+    }
+
+    .tpl-european .cv-left {
+      background: #f4f6ff;
+      border-radius: 1.5rem;
+      padding: 1.75rem;
+      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, .08);
+    }
+
+    .tpl-european .cv-header {
+      margin-bottom: 0.5rem;
+      padding-bottom: 0;
+    }
+
+    .tpl-european .cv-title {
+      font-size: 42px;
+      letter-spacing: -0.03em;
+    }
+
+    .tpl-european .cv-title-line+.cv-title-line {
+      margin-top: -0.35rem;
+    }
+
+    .tpl-european #cvPhotoWrap {
+      width: 96px;
+      height: 96px;
+      border: 4px solid #fff;
+      box-shadow: 0 12px 30px rgba(47, 71, 163, .25);
+    }
+
+    .tpl-european .section-head {
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
+    .tpl-european #personalFields .muted {
+      color: #94a3b8;
+    }
+
+    .tpl-european #skillsList,
+    .tpl-european #languagesList {
+      display: block;
+    }
+
+    .tpl-europass .cv-body {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 2.5rem;
+    }
+
+    .tpl-europass .cv-left {
+      background: linear-gradient(180deg, #f7f9ff 0%, #eef1ff 100%);
+      border-radius: 1.75rem;
+      padding: 1.8rem;
+      box-shadow: inset 0 0 0 1px rgba(31, 60, 136, .12);
+    }
+
+    .tpl-europass .cv-right {
+      position: relative;
+      padding-left: 2rem;
+    }
+
+    .tpl-europass .cv-right::before {
+      content: '';
+      position: absolute;
+      left: 0.6rem;
+      top: 0.75rem;
+      bottom: 0.75rem;
+      width: 2px;
+      background: rgba(31, 60, 136, .25);
+    }
+
+    .tpl-europass .cv-title {
+      font-size: 40px;
+      letter-spacing: -0.025em;
+    }
+
+    .tpl-europass .cv-title-line+.cv-title-line {
+      margin-top: -0.25rem;
+    }
+
+    .tpl-europass #cvPhotoWrap {
+      width: 110px;
+      height: 110px;
+      border: 5px solid #fff;
+      box-shadow: 0 16px 35px rgba(15, 23, 42, .25);
+    }
+
+    .tpl-europass .section-head {
+      font-size: 0.78rem;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: #95a3c5;
+    }
+
+    .tpl-europass #employmentList>div,
+    .tpl-europass #educationList>div {
+      position: relative;
+      padding-left: 1.5rem;
+      border: none;
+      margin-bottom: 1.75rem;
+    }
+
+    .tpl-europass #employmentList>div:last-child,
+    .tpl-europass #educationList>div:last-child {
+      margin-bottom: 0;
+    }
+
+    .tpl-europass #employmentList>div::before,
+    .tpl-europass #educationList>div::before {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid #fff;
+      background: var(--accent);
+      left: -0.95rem;
+      top: 0.25rem;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, .18);
+    }
 
     @media (max-width: 1023px) {
-      .tpl-european .cv-body { grid-template-columns: 1fr; }
-      .tpl-european .cv-left { order: 1; }
-      .tpl-european .cv-right { order: 2; }
-      .tpl-europass .cv-body { grid-template-columns: 1fr; }
-      .tpl-europass .cv-right { padding-left: 0; }
-      .tpl-europass .cv-right::before { display: none; }
+      .tpl-european .cv-body {
+        grid-template-columns: 1fr;
+      }
+
+      .tpl-european .cv-left {
+        order: 1;
+      }
+
+      .tpl-european .cv-right {
+        order: 2;
+      }
+
+      .tpl-europass .cv-body {
+        grid-template-columns: 1fr;
+      }
+
+      .tpl-europass .cv-right {
+        padding-left: 0;
+      }
+
+      .tpl-europass .cv-right::before {
+        display: none;
+      }
     }
 
     /* Subtle flash when headline appears/updates */
@@ -69,15 +371,222 @@
       padding: 2px 6px;
       border-radius: 6px;
     }
+
     @keyframes headlineFade {
-      0% { background: rgba(59, 130, 246, 0.20); }
-      50% { background: rgba(59, 130, 246, 0.10); }
-      100% { background: transparent; }
+      0% {
+        background: rgba(59, 130, 246, 0.20);
+      }
+
+      50% {
+        background: rgba(59, 130, 246, 0.10);
+      }
+
+      100% {
+        background: transparent;
+      }
+    }
+
+    /* Canva-style editable elements */
+    .cv-element-editable {
+      position: relative;
+      transition: outline 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cv-element-inner {
+      width: 100%;
+      height: 100%;
+      transform-origin: top left;
+    }
+
+    .cv-element-editable:hover {
+      outline: 2px solid #8b5cf6;
+      outline-offset: 2px;
+    }
+
+    .cv-element-editable:focus-within {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+
+    .cv-element-editable [contenteditable="true"]:focus {
+      outline: none;
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .cv-element-delete {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .cv-element-editable:hover .cv-element-delete {
+      opacity: 1;
+    }
+
+    /* Drag handle for text blocks and other elements */
+    .cv-drag-handle {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 32px;
+      height: 6px;
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.65);
+      cursor: move;
+      opacity: 0;
+      transition: opacity 0.15s ease, background 0.15s ease;
+      z-index: 25;
+    }
+
+    .cv-element-editable:hover .cv-drag-handle,
+    .cv-element-selected .cv-drag-handle {
+      opacity: 1;
+    }
+
+    .cv-drag-handle:hover {
+      background: rgba(59, 130, 246, 0.9);
+    }
+
+    /* Draggable elements */
+    .cv-element-draggable {
+      cursor: move;
+      touch-action: none;
+    }
+
+    .cv-element-draggable:active {
+      cursor: grabbing;
+    }
+
+    .cv-element-draggable [contenteditable="true"] {
+      cursor: text;
+    }
+
+    /* Animation for added elements */
+    @keyframes elementAdded {
+      0% {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .cv-element-editable {
+      animation: elementAdded 0.2s ease-out;
+    }
+
+    /* Canvas container for absolute positioning */
+    #cvRoot {
+      position: relative;
+      min-height: 842px;
+    }
+
+    /* Resize handles */
+    .cv-element-selected {
+      outline: 2px solid #3b82f6 !important;
+      outline-offset: 0 !important;
+    }
+
+    .resize-handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #fff;
+      border: 2px solid #3b82f6;
+      border-radius: 2px;
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+
+    .cv-element-selected .resize-handle {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .resize-handle:hover {
+      background: #3b82f6;
+    }
+
+    /* Corner handles */
+    .resize-handle.top-left {
+      top: -5px;
+      left: -5px;
+      cursor: nwse-resize;
+    }
+
+    .resize-handle.top-right {
+      top: -5px;
+      right: -5px;
+      cursor: nesw-resize;
+    }
+
+    .resize-handle.bottom-left {
+      bottom: -5px;
+      left: -5px;
+      cursor: nesw-resize;
+    }
+
+    .resize-handle.bottom-right {
+      bottom: -5px;
+      right: -5px;
+      cursor: nwse-resize;
+    }
+
+    /* Edge handles */
+    .resize-handle.top-center {
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      cursor: ns-resize;
+    }
+
+    .resize-handle.bottom-center {
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      cursor: ns-resize;
+    }
+
+    .resize-handle.left-center {
+      top: 50%;
+      left: -5px;
+      transform: translateY(-50%);
+      cursor: ew-resize;
+    }
+
+    .resize-handle.right-center {
+      top: 50%;
+      right: -5px;
+      transform: translateY(-50%);
+      cursor: ew-resize;
     }
   </style>
 </head>
+
 <body class="bg-gray-50">
+  <script>
+    // Tailwind CDN fallback: гарантируем стили превью при любых сбоях
+    (function () {
+      if (!document.getElementById('tw-cdn-fallback')) {
+        const s = document.createElement('script');
+        s.id = 'tw-cdn-fallback';
+        s.src = 'https://cdn.tailwindcss.com';
+        document.head.appendChild(s);
+        console.warn('Tailwind CSS: CDN fallback загружен (preview)');
+      }
+    })();
+  </script>
   <div class="max-w-4xl mx-auto p-6">
+    <div id="docxNotice" class="hidden bg-yellow-50 border border-yellow-200 text-yellow-900 rounded-lg p-4 mb-4">
+      <div class="font-semibold mb-1">Предпросмотр DOCX недоступен в браузере.</div>
+      <div class="text-sm">Вы можете <a id="docxDownload" href="#" class="underline text-yellow-900">скачать шаблон</a>
+        и открыть его в редакторе документов.</div>
+    </div>
     <div class="flex flex-wrap items-center justify-between mb-4 gap-3">
       <div class="text-sm text-gray-500">Выберите шаблон:</div>
       <div class="flex flex-wrap gap-2" id="tplPicker">
@@ -90,7 +599,7 @@
       </div>
     </div>
 
-    <div id="cvRoot" class="cv-card shadow rounded-lg tpl-modern">
+    <div id="cvRoot" class="cv-card shadow rounded-lg tpl-modern theme-blue font-medium">
       <div class="cv-header p-4 -mx-4 -mt-4 mb-3 rounded">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -99,7 +608,8 @@
           </div>
           <div class="flex items-center gap-3">
             <span id="cvTemplate" class="text-xs px-2 py-1 rounded border bg-white/70">modern</span>
-            <div id="cvPhotoWrap" class="w-20 h-20 rounded-full overflow-hidden border hidden">
+            <span id="cvDocx" class="text-xs px-2 py-1 rounded border bg-white/70">DOCX: Custom</span>
+            <div id="cvPhotoWrap" class="w-20 h-20 overflow-hidden border hidden">
               <img id="cvPhoto" alt="photo" class="w-full h-full object-cover" />
             </div>
           </div>
@@ -148,37 +658,87 @@
       </div>
 
       <div class="mt-6 flex flex-wrap gap-3">
-        <a href="/pages/cv-builder" class="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white">Редактировать</a>
+        <a href="/pages/pdf-converter"
+          class="inline-flex items-center px-4 py-2 rounded bg-blue-600 text-white">Редактировать</a>
         <button id="applyTplBtn" class="inline-flex items-center px-4 py-2 rounded border">Применить шаблон</button>
       </div>
     </div>
   </div>
 
   <script>
+    // Если пришёл docx в query, показываем понятную заглушку
+    (function () {
+      try {
+        const url = new URL(window.location.href);
+        const docx = url.searchParams.get('docx');
+        if (docx) {
+          document.getElementById('tplPicker').classList.add('hidden');
+          document.getElementById('applyTplBtn').classList.add('hidden');
+          document.getElementById('cvRoot').classList.add('hidden');
+          const n = document.getElementById('docxNotice');
+          const a = document.getElementById('docxDownload');
+          a.href = docx;
+          n.classList.remove('hidden');
+        }
+      } catch (_) { }
+    })();
     function getData() {
       try {
         const url = new URL(window.location.href);
         const raw = url.searchParams.get('data');
         if (raw) return JSON.parse(decodeURIComponent(raw));
-      } catch (_) {}
+        // fallback: если передан template в query, используем его до postMessage
+        const tpl = url.searchParams.get('template');
+        if (tpl) {
+          // Для blank - возвращаем пустые данные (чистый лист)
+          if (tpl === 'blank') {
+            return { template: 'blank' };
+          }
+          const local = localStorage.getItem('cvBuilderData');
+          const base = local ? JSON.parse(local) : {};
+          base.template = tpl;
+          return base;
+        }
+      } catch (_) { }
       try {
         const local = localStorage.getItem('cvBuilderData');
         if (local) return JSON.parse(local);
-      } catch (_) {}
+      } catch (_) { }
       return {};
     }
 
     function applyTemplate(root, template) {
-      root.classList.remove('tpl-modern','tpl-classic','tpl-minimal','tpl-creative','tpl-european');
-      const map = { modern:'tpl-modern', classic:'tpl-classic', minimal:'tpl-minimal', creative:'tpl-creative', european:'tpl-european', europass:'tpl-europass' };
+      root.classList.remove('tpl-modern', 'tpl-classic', 'tpl-minimal', 'tpl-creative', 'tpl-european', 'tpl-europass', 'tpl-blank');
+      const map = { modern: 'tpl-modern', classic: 'tpl-classic', minimal: 'tpl-minimal', creative: 'tpl-creative', european: 'tpl-european', europass: 'tpl-europass', blank: 'tpl-blank' };
       root.classList.add(map[template] || 'tpl-modern');
+      // Форма фото согласно шаблону (квадрат/прямоугольник для PDF-примеров)
+      try {
+        const wrap = document.getElementById('cvPhotoWrap');
+        if (wrap) {
+          if (template === 'classic' || template === 'minimal') {
+            wrap.classList.remove('rounded-full');
+            wrap.classList.add('rounded');
+          } else {
+            wrap.classList.remove('rounded');
+            wrap.classList.add('rounded-full');
+          }
+        }
+      } catch (_) { }
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
         if (btn.dataset.tpl === template) {
-          btn.classList.add('border-blue-400','ring-2','ring-blue-200');
+          btn.classList.add('border-blue-400', 'ring-2', 'ring-blue-200');
         } else {
-          btn.classList.remove('border-blue-400','ring-2','ring-blue-200');
+          btn.classList.remove('border-blue-400', 'ring-2', 'ring-blue-200');
         }
       });
+    }
+
+    function applyQuickStyles(root, settings) {
+      const color = (settings && settings.colorScheme) || 'blue';
+      const size = (settings && settings.fontSize) || 'medium';
+      root.classList.remove('theme-blue', 'theme-emerald', 'theme-rose', 'font-small', 'font-medium', 'font-large');
+      root.classList.add(`theme-${color}`);
+      root.classList.add(`font-${size}`);
     }
 
     function render(dataOverride) {
@@ -195,6 +755,7 @@
       const root = document.getElementById('cvRoot');
       const titleEl = document.getElementById('cvTitle');
       const tplEl = document.getElementById('cvTemplate');
+      const docxEl = document.getElementById('cvDocx');
       const headlineEl = document.getElementById('cvHeadline');
       const photoWrap = document.getElementById('cvPhotoWrap');
       const photoImg = document.getElementById('cvPhoto');
@@ -202,7 +763,32 @@
       const summaryContent = document.getElementById('summaryContent');
 
       tplEl.textContent = template;
+
+      // For blank template, hide picker and show only the white canvas
+      const picker = document.getElementById('tplPicker');
+      const pickerLabel = picker?.previousElementSibling;
+      if (template === 'blank') {
+        picker?.classList.add('hidden');
+        pickerLabel?.classList.add('hidden');
+        tplEl?.classList.add('hidden');
+        docxEl?.classList.add('hidden');
+        root.classList.remove('shadow', 'rounded-lg');
+      } else {
+        picker?.classList.remove('hidden');
+        pickerLabel?.classList.remove('hidden');
+        tplEl?.classList.remove('hidden');
+        docxEl?.classList.remove('hidden');
+        root.classList.add('shadow', 'rounded-lg');
+      }
+
+      // Show mapped DOCX variant for clarity
+      if (docxEl) {
+        const docxMap = { classic: 'Experienced', minimal: 'Entry-level' };
+        const docxLabel = docxMap[template] ? docxMap[template] : 'Custom';
+        docxEl.textContent = `DOCX: ${docxLabel}`;
+      }
       applyTemplate(root, template);
+      applyQuickStyles(root, data.settings);
       const pinfo = data.personalInfo || {};
       const useAsHeadline = !!pinfo.useAsHeadline;
       let headline = '';
@@ -227,7 +813,7 @@
       }
 
       const nameParts = [pinfo['given-name'] || pinfo.givenName, pinfo['family-name'] || pinfo.familyName].filter(Boolean);
-      if (['european','europass'].includes(template) && nameParts.length) {
+      if (['european', 'europass'].includes(template) && nameParts.length) {
         titleEl.innerHTML = nameParts.map(part => `<span class="cv-title-line">${part}</span>`).join('');
       } else {
         const fallbackTitle = data.title || nameParts.join(' ') || 'Моё резюме';
@@ -363,11 +949,14 @@
         const data = local ? JSON.parse(local) : {};
         data.template = tpl;
         localStorage.setItem('cvBuilderData', JSON.stringify(data));
-      } catch (_) {}
+      } catch (_) { }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
       render();
+      try {
+        window.parent.postMessage({ type: 'cv-ready' }, window.location.origin);
+      } catch (_) { }
       document.querySelectorAll('#tplPicker [data-tpl]').forEach(btn => {
         btn.addEventListener('click', () => {
           const tpl = btn.dataset.tpl;
@@ -389,5 +978,638 @@
       });
     });
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script>
+    // Canva Elements Handler - добавление элементов на холст с drag & drop
+    (function () {
+      'use strict';
+
+      let elementCounter = 0;
+      let draggedElement = null;
+      let dragOffsetX = 0;
+      let dragOffsetY = 0;
+      let isDragging = false;
+      let isResizing = false;
+      let resizeElement = null;
+      let resizeHandle = null;
+      let resizeStartX = 0;
+      let resizeStartY = 0;
+      let resizeStartWidth = 0;
+      let resizeStartHeight = 0;
+      let resizeStartLeft = 0;
+      let resizeStartTop = 0;
+      let selectedElement = null;
+      let textToolbar = null;
+
+      // Убедиться что cvRoot имеет position: relative для абсолютного позиционирования детей
+      function ensureCanvasReady() {
+        const root = document.getElementById('cvRoot');
+        if (root) {
+          root.style.position = 'relative';
+          root.style.minHeight = '842px'; // A4 height
+          root.style.overflow = 'hidden';
+        }
+      }
+
+      // Создание редактируемого элемента с возможностью перетаскивания
+      function createEditableElement(type, content, styles = {}) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'cv-element cv-element-editable cv-element-draggable';
+        wrapper.dataset.elementType = type;
+        wrapper.dataset.elementId = 'elem-' + (++elementCounter);
+
+        // Абсолютное позиционирование для свободного перемещения
+        Object.assign(wrapper.style, {
+          position: 'absolute',
+          cursor: 'move',
+          left: '50px',
+          top: '50px',
+          zIndex: '5',
+          userSelect: 'none',
+          ...styles
+        });
+
+        // Внутренняя обёртка, которую будем масштабировать целиком при ресайзе
+        wrapper.innerHTML = '<div class="cv-element-inner">' + content + '</div>';
+
+        // Drag‑handle, чтобы можно было перетаскивать даже текстовые блоки
+        const dragHandle = document.createElement('div');
+        dragHandle.className = 'cv-drag-handle';
+        dragHandle.title = 'Перетащить блок';
+        dragHandle.addEventListener('mousedown', startDrag);
+        wrapper.appendChild(dragHandle);
+
+        // Добавить кнопку удаления
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'cv-element-delete';
+        deleteBtn.innerHTML = '&times;';
+        Object.assign(deleteBtn.style, {
+          position: 'absolute',
+          top: '-10px',
+          right: '-10px',
+          width: '24px',
+          height: '24px',
+          background: '#ef4444',
+          color: 'white',
+          border: 'none',
+          borderRadius: '50%',
+          cursor: 'pointer',
+          fontSize: '16px',
+          lineHeight: '1',
+          display: 'none',
+          zIndex: '20',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        });
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          wrapper.remove();
+          if (selectedElement === wrapper) {
+            selectedElement = null;
+          }
+        };
+        wrapper.appendChild(deleteBtn);
+
+        // Добавить resize handles
+        const handlePositions = [
+          'top-left', 'top-center', 'top-right',
+          'left-center', 'right-center',
+          'bottom-left', 'bottom-center', 'bottom-right'
+        ];
+
+        handlePositions.forEach(pos => {
+          const handle = document.createElement('div');
+          handle.className = `resize-handle ${pos}`;
+          handle.dataset.handle = pos;
+          handle.addEventListener('mousedown', (e) => startResize(e, wrapper, pos));
+          wrapper.appendChild(handle);
+        });
+
+        // Показывать кнопку удаления и рамку при наведении
+        wrapper.addEventListener('mouseenter', () => {
+          if (!isDragging && !isResizing) {
+            deleteBtn.style.display = 'flex';
+            deleteBtn.style.alignItems = 'center';
+            deleteBtn.style.justifyContent = 'center';
+            if (!wrapper.classList.contains('cv-element-selected')) {
+              wrapper.style.outline = '2px solid #8b5cf6';
+              wrapper.style.outlineOffset = '2px';
+            }
+          }
+        });
+        wrapper.addEventListener('mouseleave', () => {
+          if (!isDragging && !isResizing) {
+            deleteBtn.style.display = 'none';
+            if (!wrapper.classList.contains('cv-element-selected')) {
+              wrapper.style.outline = 'none';
+            }
+          }
+        });
+
+        // Drag & Drop функциональность
+        wrapper.addEventListener('mousedown', startDrag);
+
+        return wrapper;
+      }
+
+      // Начать перетаскивание
+      function startDrag(e) {
+        // Не начинать drag если клик на contenteditable элемент, кнопку удаления или resize handle
+        if ((e.target.hasAttribute('contenteditable') ||
+          e.target.closest('[contenteditable="true"]')) &&
+          !e.target.classList.contains('cv-drag-handle')) {
+          return;
+        }
+
+        if (e.target.classList.contains('cv-element-delete') ||
+          e.target.classList.contains('resize-handle')) {
+          return;
+        }
+
+        e.preventDefault();
+
+        // При mousedown на drag‑handle берём его родителя как перемещаемый элемент
+        const element = e.currentTarget.classList.contains('cv-drag-handle')
+          ? e.currentTarget.parentElement
+          : e.currentTarget;
+
+        // Выделить элемент при клике
+        selectElement(element);
+
+        draggedElement = element;
+        isDragging = true;
+
+        // Вычислить смещение курсора относительно элемента
+        const rect = element.getBoundingClientRect();
+        dragOffsetX = e.clientX - rect.left;
+        dragOffsetY = e.clientY - rect.top;
+
+        // Поднять элемент наверх
+        element.style.zIndex = '100';
+        element.style.opacity = '0.9';
+        element.style.boxShadow = '0 8px 25px rgba(0,0,0,0.25)';
+        element.style.outline = '2px dashed #8b5cf6';
+
+        document.addEventListener('mousemove', onDrag);
+        document.addEventListener('mouseup', stopDrag);
+      }
+
+      // Во время перетаскивания
+      function onDrag(e) {
+        if (!draggedElement || !isDragging) return;
+
+        const root = document.getElementById('cvRoot');
+        if (!root) return;
+
+        const rootRect = root.getBoundingClientRect();
+
+        // Вычислить новую позицию относительно canvas
+        let newX = e.clientX - rootRect.left - dragOffsetX;
+        let newY = e.clientY - rootRect.top - dragOffsetY;
+
+        // Ограничить границами canvas
+        const elemRect = draggedElement.getBoundingClientRect();
+        const maxX = root.offsetWidth - elemRect.width;
+        const maxY = root.offsetHeight - elemRect.height;
+
+        newX = Math.max(0, Math.min(newX, maxX));
+        newY = Math.max(0, Math.min(newY, maxY));
+
+        draggedElement.style.left = newX + 'px';
+        draggedElement.style.top = newY + 'px';
+      }
+
+      // Закончить перетаскивание
+      function stopDrag(e) {
+        if (!draggedElement) return;
+
+        draggedElement.style.zIndex = '5';
+        draggedElement.style.opacity = '1';
+        draggedElement.style.boxShadow = 'none';
+        draggedElement.style.outline = 'none';
+
+        draggedElement = null;
+        isDragging = false;
+
+        document.removeEventListener('mousemove', onDrag);
+        document.removeEventListener('mouseup', stopDrag);
+      }
+
+      // === Выделение элемента ===
+      function selectElement(element) {
+        // Снять выделение с предыдущего элемента
+        if (selectedElement && selectedElement !== element) {
+          selectedElement.classList.remove('cv-element-selected');
+        }
+
+        // Выделить новый элемент
+        selectedElement = element;
+        element.classList.add('cv-element-selected');
+
+        // Обновить тулбар изменения текста
+        updateTextToolbar();
+      }
+
+      function deselectElement() {
+        if (selectedElement) {
+          selectedElement.classList.remove('cv-element-selected');
+          selectedElement = null;
+        }
+
+        // Скрыть тулбар, если нет выделения
+        updateTextToolbar();
+      }
+
+      // Снять выделение при клике на canvas (но не на элемент)
+      document.addEventListener('click', (e) => {
+        if (e.target.id === 'cvRoot' || e.target.closest('#cvRoot') === document.getElementById('cvRoot') && !e.target.closest('.cv-element-editable')) {
+          deselectElement();
+        }
+      });
+
+      // === Resize функции ===
+      function startResize(e, element, handlePos) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        isResizing = true;
+        resizeElement = element;
+        resizeHandle = handlePos;
+
+        resizeStartX = e.clientX;
+        resizeStartY = e.clientY;
+        resizeStartWidth = element.offsetWidth;
+        resizeStartHeight = element.offsetHeight;
+        resizeStartLeft = parseInt(element.style.left) || 0;
+        resizeStartTop = parseInt(element.style.top) || 0;
+
+        // Зафиксировать базовые размеры содержимого для пропорционального масштабирования
+        captureResizeBaseMetrics(element);
+
+        // Выделить элемент
+        selectElement(element);
+
+        document.addEventListener('mousemove', onResize);
+        document.addEventListener('mouseup', stopResize);
+      }
+
+      // Сохранить базовые размеры элемента перед первым ресайзом (для относительного scale)
+      function captureResizeBaseMetrics(element) {
+        if (element.__baseMetrics && element.__baseMetrics.width) return;
+        const base = {
+          width: resizeStartWidth || element.offsetWidth || 1,
+          height: resizeStartHeight || element.offsetHeight || 1
+        };
+        element.__baseMetrics = base;
+      }
+
+      function onResize(e) {
+        if (!isResizing || !resizeElement) return;
+
+        const deltaX = e.clientX - resizeStartX;
+        const deltaY = e.clientY - resizeStartY;
+
+        let newWidth = resizeStartWidth;
+        let newHeight = resizeStartHeight;
+        let newLeft = resizeStartLeft;
+        let newTop = resizeStartTop;
+
+        // Минимальные размеры
+        const minWidth = 20;
+        const minHeight = 20;
+
+        // Обработка в зависимости от позиции handle
+        switch (resizeHandle) {
+          case 'top-left':
+            newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
+            newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
+            newLeft = resizeStartLeft + (resizeStartWidth - newWidth);
+            newTop = resizeStartTop + (resizeStartHeight - newHeight);
+            break;
+          case 'top-center':
+            newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
+            newTop = resizeStartTop + (resizeStartHeight - newHeight);
+            break;
+          case 'top-right':
+            newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
+            newHeight = Math.max(minHeight, resizeStartHeight - deltaY);
+            newTop = resizeStartTop + (resizeStartHeight - newHeight);
+            break;
+          case 'left-center':
+            newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
+            newLeft = resizeStartLeft + (resizeStartWidth - newWidth);
+            break;
+          case 'right-center':
+            newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
+            break;
+          case 'bottom-left':
+            newWidth = Math.max(minWidth, resizeStartWidth - deltaX);
+            newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
+            newLeft = resizeStartLeft + (resizeStartWidth - newWidth);
+            break;
+          case 'bottom-center':
+            newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
+            break;
+          case 'bottom-right':
+            newWidth = Math.max(minWidth, resizeStartWidth + deltaX);
+            newHeight = Math.max(minHeight, resizeStartHeight + deltaY);
+            break;
+        }
+
+        // Применить новые размеры рамки
+        resizeElement.style.width = newWidth + 'px';
+        resizeElement.style.height = newHeight + 'px';
+        resizeElement.style.left = newLeft + 'px';
+        resizeElement.style.top = newTop + 'px';
+
+        // Пропорционально масштабировать содержимое внутри элемента одной transform-обёрткой (как в Canva/Word)
+        const base = resizeElement.__baseMetrics;
+        if (base && base.width > 0 && base.height > 0) {
+          const inner = resizeElement.querySelector('.cv-element-inner') || resizeElement.firstElementChild;
+          if (inner) {
+            const scaleX = newWidth / base.width;
+            const scaleY = newHeight / base.height;
+            let scale = Math.min(scaleX, scaleY);
+            if (!isFinite(scale) || scale <= 0) scale = 1;
+            scale = Math.max(0.2, Math.min(5, scale));
+            inner.style.transform = 'scale(' + scale + ')';
+          }
+        }
+      }
+
+      function stopResize(e) {
+        isResizing = false;
+        resizeElement = null;
+        resizeHandle = null;
+
+        document.removeEventListener('mousemove', onResize);
+        document.removeEventListener('mouseup', stopResize);
+      }
+
+      // ==== Тулбар изменения размера текста для выделенного элемента ====
+
+      function ensureTextToolbar() {
+        if (textToolbar) return textToolbar;
+
+        const bar = document.createElement('div');
+        bar.id = 'cvTextToolbar';
+        Object.assign(bar.style, {
+          position: 'fixed',
+          bottom: '16px',
+          right: '16px',
+          display: 'none',
+          zIndex: 999,
+          background: '#111827',
+          color: '#f9fafb',
+          borderRadius: '9999px',
+          padding: '4px 8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+          fontSize: '12px',
+          gap: '4px',
+          alignItems: 'center',
+          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        });
+
+        bar.innerHTML = '<span style="margin-right:4px;">Размер текста:</span>' +
+          '<button type="button" data-action="smaller" style="padding:2px 6px;border-radius:9999px;border:none;background:#374151;color:#f9fafb;cursor:pointer;">A-</button>' +
+          '<button type="button" data-action="larger" style="padding:2px 6px;border-radius:9999px;border:none;background:#2563eb;color:#f9fafb;cursor:pointer;">A+</button>';
+
+        bar.addEventListener('click', (e) => {
+          const btn = e.target.closest('button');
+          if (!btn || !selectedElement) return;
+          const delta = btn.dataset.action === 'larger' ? 2 : -2;
+          adjustSelectedTextSize(delta);
+        });
+
+        document.body.appendChild(bar);
+        textToolbar = bar;
+        return bar;
+      }
+
+      function elementHasTextContent(el) {
+        if (!el) return false;
+        return !!el.querySelector('[contenteditable="true"], p, h1, h2, h3, li, td, th, span');
+      }
+
+      function updateTextToolbar() {
+        const bar = ensureTextToolbar();
+        if (selectedElement && elementHasTextContent(selectedElement)) {
+          bar.style.display = 'flex';
+        } else {
+          bar.style.display = 'none';
+        }
+      }
+
+      function adjustSelectedTextSize(deltaPx) {
+        if (!selectedElement || !deltaPx) return;
+        const nodes = selectedElement.querySelectorAll('[contenteditable="true"], p, h1, h2, h3, li, td, th, span');
+        nodes.forEach((node) => {
+          const style = window.getComputedStyle(node);
+          const current = parseFloat(style.fontSize || '0');
+          if (!current) return;
+          const next = Math.max(6, Math.min(96, current + deltaPx));
+          node.style.fontSize = next + 'px';
+        });
+      }
+
+      // Элементы по типам
+      const elementTemplates = {
+        // Линии и разделители
+        'line-solid': () => createEditableElement('line', '<div style="width: 200px; height: 2px; background: #374151;"></div>'),
+        'divider': () => createEditableElement('divider', '<div style="width: 200px; height: 1px; background: linear-gradient(90deg, transparent, #9ca3af, transparent);"></div>'),
+
+        // Иконки
+        'icon-star': () => createEditableElement('icon', '<svg viewBox="0 0 24 24" fill="#fbbf24" width="40" height="40"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'),
+        'icon-heart': () => createEditableElement('icon', '<svg viewBox="0 0 24 24" fill="#ef4444" width="40" height="40"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>'),
+        'icon-check': () => createEditableElement('icon', '<svg viewBox="0 0 24 24" fill="#22c55e" width="40" height="40"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>'),
+        'icon-arrow': () => createEditableElement('icon', '<svg viewBox="0 0 24 24" fill="#3b82f6" width="40" height="40"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>'),
+
+        // Заголовки
+        'heading-h1': () => {
+          return createEditableElement('heading', '<h1 contenteditable="true" style="font-size: 28px; font-weight: bold; margin: 0; padding: 8px; min-width: 150px; background: transparent;">Заголовок</h1>');
+        },
+        'heading-h2': () => {
+          return createEditableElement('heading', '<h2 contenteditable="true" style="font-size: 22px; font-weight: 600; margin: 0; padding: 6px; min-width: 120px; background: transparent;">Подзаголовок</h2>');
+        },
+        'heading-h3': () => {
+          return createEditableElement('heading', '<h3 contenteditable="true" style="font-size: 18px; font-weight: 500; margin: 0; padding: 4px; min-width: 100px; background: transparent;">Малый заголовок</h3>');
+        },
+
+        // Текстовые блоки
+        'paragraph': () => {
+          return createEditableElement('paragraph', '<p contenteditable="true" style="font-size: 14px; line-height: 1.6; margin: 0; padding: 8px; min-width: 200px; max-width: 400px; background: transparent;">Введите текст здесь. Нажмите дважды для редактирования.</p>');
+        },
+        'list-bullet': () => {
+          return createEditableElement('list', `
+            <ul contenteditable="true" style="font-size: 14px; line-height: 1.8; margin: 0; padding: 8px 8px 8px 32px; min-width: 180px; background: transparent;">
+              <li>Пункт 1</li>
+              <li>Пункт 2</li>
+              <li>Пункт 3</li>
+            </ul>
+          `);
+        },
+        'list-number': () => {
+          return createEditableElement('list', `
+            <ol contenteditable="true" style="font-size: 14px; line-height: 1.8; margin: 0; padding: 8px 8px 8px 32px; min-width: 180px; background: transparent;">
+              <li>Первый пункт</li>
+              <li>Второй пункт</li>
+              <li>Третий пункт</li>
+            </ol>
+          `);
+        },
+
+        // Фигуры
+        'shape-rect': () => createEditableElement('shape', '<div style="width: 120px; height: 70px; background: #e5e7eb; border: 2px solid #9ca3af; border-radius: 4px;"></div>'),
+        'shape-circle': () => createEditableElement('shape', '<div style="width: 80px; height: 80px; background: #e5e7eb; border: 2px solid #9ca3af; border-radius: 50%;"></div>'),
+        'shape-rounded': () => createEditableElement('shape', '<div style="width: 120px; height: 70px; background: #e5e7eb; border: 2px solid #9ca3af; border-radius: 20px;"></div>'),
+        'shape-square': () => createEditableElement('shape', '<div style="width: 80px; height: 80px; background: #e5e7eb; border: 2px solid #9ca3af; border-radius: 4px;"></div>'),
+        'shape-triangle': () => createEditableElement('shape', '<div style="width: 0; height: 0; border-left: 50px solid transparent; border-right: 50px solid transparent; border-bottom: 86px solid #9ca3af;"></div>'),
+        'shape-diamond': () => createEditableElement('shape', '<div style="width: 70px; height: 70px; background: #9ca3af; transform: rotate(45deg);"></div>'),
+
+        // Изображения placeholder
+        'photo-placeholder': () => createEditableElement('image', `
+          <div style="width: 120px; height: 120px; background: #f3f4f6; border: 2px dashed #9ca3af; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" fill="#9ca3af" width="48" height="48"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5z"/></svg>
+          </div>
+        `),
+        'logo-placeholder': () => createEditableElement('image', `
+          <div style="width: 100px; height: 100px; background: #f3f4f6; border: 2px dashed #9ca3af; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" width="40" height="40"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+        `),
+
+        // Таблицы
+        'table-2x2': () => createEditableElement('table', createTable(2, 2)),
+        'table-3x2': () => createEditableElement('table', createTable(3, 2)),
+        'table-2x3': () => createEditableElement('table', createTable(2, 3)),
+        'table-3x3': () => createEditableElement('table', createTable(3, 3))
+      };
+
+      function createTable(cols, rows) {
+        let html = '<table style="border-collapse: collapse; font-size: 12px; background: white;">';
+        for (let r = 0; r < rows; r++) {
+          html += '<tr>';
+          for (let c = 0; c < cols; c++) {
+            html += `<td contenteditable="true" style="border: 1px solid #d1d5db; padding: 10px 16px; min-width: 80px;">Ячейка</td>`;
+          }
+          html += '</tr>';
+        }
+        html += '</table>';
+        return html;
+      }
+
+      // Счётчик для смещения новых элементов
+      let addCounter = 0;
+
+      function addElement(type) {
+        ensureCanvasReady();
+
+        const root = document.getElementById('cvRoot');
+        if (!root) return;
+
+        const template = elementTemplates[type];
+        if (!template) {
+          console.warn('Unknown element type:', type);
+          return;
+        }
+
+        const element = template();
+
+        // Добавить смещение для каждого нового элемента чтобы они не накладывались
+        addCounter++;
+        const offsetX = 50 + (addCounter % 5) * 30;
+        const offsetY = 50 + (addCounter % 8) * 25;
+        element.style.left = offsetX + 'px';
+        element.style.top = offsetY + 'px';
+
+        // Добавить прямо в cvRoot (canvas)
+        root.appendChild(element);
+
+        // Визуальная подсказка о добавлении
+        element.style.transform = 'scale(0.8)';
+        element.style.opacity = '0';
+        requestAnimationFrame(() => {
+          element.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+          element.style.transform = 'scale(1)';
+          element.style.opacity = '1';
+        });
+      }
+
+      function addImage(dataUrl) {
+        ensureCanvasReady();
+
+        const root = document.getElementById('cvRoot');
+        if (!root) return;
+
+        const wrapper = createEditableElement('image', `
+          <img src="${dataUrl}" alt="Uploaded image" style="max-width: 300px; max-height: 300px; display: block; border-radius: 4px;">
+        `);
+
+        addCounter++;
+        wrapper.style.left = (60 + (addCounter % 4) * 40) + 'px';
+        wrapper.style.top = (60 + (addCounter % 6) * 30) + 'px';
+
+        root.appendChild(wrapper);
+      }
+
+      // Слушатель сообщений от родительского окна
+      window.addEventListener('message', (event) => {
+        const msg = event.data;
+        if (!msg) return;
+
+        if (msg.type === 'addElement') {
+          addElement(msg.element);
+        }
+
+        if (msg.type === 'addImage') {
+          addImage(msg.imageData);
+        }
+      });
+
+      // Инициализация при загрузке
+      document.addEventListener('DOMContentLoaded', ensureCanvasReady);
+    })();
+  </script>
+  <script>
+    // PNG export bridge
+    window.addEventListener('message', async (event) => {
+      const msg = event.data;
+      if (!msg) return;
+      if (msg.type === 'export-png') {
+        try {
+          const root = document.getElementById('cvRoot');
+          const canvas = await html2canvas(root, { backgroundColor: null, scale: 2 });
+          const dataUrl = canvas.toDataURL('image/png');
+          window.parent.postMessage({ type: 'export-png-result', dataUrl }, window.location.origin);
+        } catch (e) {
+          window.parent.postMessage({ type: 'export-png-result', dataUrl: null, error: e?.message }, window.location.origin);
+        }
+      }
+      if (msg.type === 'export-pdf') {
+        try {
+          const root = document.getElementById('cvRoot');
+          const canvas = await html2canvas(root, { backgroundColor: '#ffffff', scale: 2 });
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const { jsPDF } = window.jspdf || {};
+          if (!jsPDF) throw new Error('jsPDF недоступен');
+          const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+          const imgWidth = canvas.width * scale;
+          const imgHeight = canvas.height * scale;
+          const x = (pageWidth - imgWidth) / 2;
+          const y = 32;
+          pdf.addImage(imgData, 'JPEG', x, y, imgWidth, imgHeight);
+          const blob = pdf.output('blob');
+          const url = URL.createObjectURL(blob);
+          window.parent.postMessage({ type: 'export-pdf-result', url }, window.location.origin);
+        } catch (e) {
+          window.parent.postMessage({ type: 'export-pdf-result', url: null, error: e?.message }, window.location.origin);
+        }
+      }
+    });
+  </script>
 </body>
+
 </html>
